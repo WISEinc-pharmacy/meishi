@@ -31,6 +31,13 @@ https://wiseinc-pharmacy.github.io/meishi/
 - ロール `admin`（=director）以外は自動で `viewer`（閲覧専用）として自己登録。UI上も非adminには登録タブを出さず、Firestoreルールでも書き込みを admin に限定（二重防御）
 - 将来 編集者を増やす場合は、director がコンソールで対象ユーザーの `users/{uid}.role` を `admin` に変更
 
+## 個人情報の扱い（第三者PII）
+- 対象: 営業が収集した名刺情報（取引先の連絡先＝第三者PII）。患者データとは機微度の層が異なる。
+- 保管: Firestore（`wise-meishi`、認証ユーザーのみread／director書込）。患者DBとはプロジェクト分離。
+- 保持・削除: 不要になった名刺は director が削除。保持期間の上限ルールは運用で別途定める（未確定）。
+- Gemini送信: 名刺画像のみ送信しOCR抽出に使用。**無料枠はGoogleの製品改善に使われ得る**点を許容（名刺の機微度として可）。学習させたくない場合は「課金有効なキーに差し替える」ことで対応（設定フラグではなく課金キーで担保）。
+- ガバナンス: 全社の個人情報・クラウド台帳（`wise/security_governance/`）へ `wise-meishi` を追記するか要確認（責任分界・暗号化・監査の記載）。
+
 ## ファイル構成
 - `index.html` — アプリ本体
 - `firestore.rules` — Firestoreセキュリティルール（cards / cardImages / users / config）
