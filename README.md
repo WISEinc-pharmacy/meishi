@@ -27,8 +27,9 @@ https://wiseinc-pharmacy.github.io/meishi/
 - CSV出力
 
 ## 権限
-- 全営業で共有（Firebase Authログイン必須）
-- ロール: admin / editor / viewer（Firestoreルールで制御、社員管理ツールと同方式）
+- 全営業で共有（Firebase Authログイン必須）。**閲覧は全ログインユーザー / 登録・編集・削除は director(admin) のみ**
+- ロール `admin`（=director）以外は自動で `viewer`（閲覧専用）として自己登録。UI上も非adminには登録タブを出さず、Firestoreルールでも書き込みを admin に限定（二重防御）
+- 将来 編集者を増やす場合は、director がコンソールで対象ユーザーの `users/{uid}.role` を `admin` に変更
 
 ## ファイル構成
 - `index.html` — アプリ本体

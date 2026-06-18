@@ -234,9 +234,21 @@ async function onAuth(u){
   $('#appView').classList.remove('hidden');
   // Geminiキー
   try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }
-  if(userRole==='viewer'){ $('#setupBanner').textContent='閲覧権限です。登録・編集には管理者に editor 権限の付与を依頼してください。'; $('#setupBanner').classList.remove('hidden'); }
-  if(!geminiKey){ const b=$('#setupBanner'); b.textContent=(b.textContent?b.textContent+' / ':'')+'AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); }
+  if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); b.textContent='AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); }
+  applyPermissions();
   await loadCards();
+}
+
+// ===== 権限適用（編集できるのは director(admin) のみ・他は閲覧専用）=====
+function applyPermissions(){
+  const isAdmin = userRole==='admin';
+  document.querySelector('.tab[data-tab="capture"]').style.display = isAdmin ? '' : 'none';
+  if(!isAdmin){
+    document.querySelector('.tab[data-tab="list"]').click();
+    const b=$('#setupBanner');
+    b.textContent='閲覧専用です。名刺の登録・編集ができるのは director のみです。';
+    b.classList.remove('hidden');
+  }
 }
 
 // ===== タブ =====
@@ -252,7 +264,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 // ===== 画像選択 → リサイズ → AI読み取り =====
 $('#fileInput').onchange=async e=>{
   const file=e.target.files[0]; if(!file) return;
-  if(userRole==='viewer'){ toast('登録権限がありません'); return; }
+  if(userRole!=='admin'){ toast('編集できるのは director のみです'); return; }
   const blob=await resizeImage(file,1280);
   pendingImageBlob=blob;
   const url=URL.createObjectURL(blob);
@@ -365,7 +377,7 @@ $('#cancelForm').onclick=()=>{ pendingImageBlob=null; editingId=null; show('star
 
 $('#cardForm').onsubmit=async e=>{
   e.preventDefault();
-  if(userRole==='viewer'){ toast('権限がありません'); return; }
+  if(userRole!=='admin'){ toast('権限がありません'); return; }
   const f=e.target, btn=$('#saveBtn');
   btn.disabled=true; btn.textContent='保存中…';
   try{
@@ -432,7 +444,7 @@ function renderList(){
 // ===== 詳細 =====
 window.openDetail=function(id){
   const c=cards.find(x=>x.id===id); if(!c) return;
-  const canEdit=userRole==='admin'||userRole==='editor';
+  const canEdit=userRole==='admin';
   const kv=(k,v,link)=>v?`<div class="kv"><div class="k">${k}</div><div class="v">${link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(v)}</a>`:esc(v)}</div></div>`:'';
   const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
   m.innerHTML=`<div class="modal pad">

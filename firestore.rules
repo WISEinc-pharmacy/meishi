@@ -15,22 +15,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    function isEditor() {
-      return isSignedIn() && (role() == 'admin' || role() == 'editor');
+    function isAdmin() {
+      return isSignedIn() && role() == 'admin';
     }
 
     // 名刺データ（サムネ込み・一覧で読む）
+    // 閲覧=全ログインユーザー / 登録・編集・削除= director(admin) のみ
     match /cards/{cardId} {
-      allow read: if isSignedIn();          // 全営業が閲覧・検索
-      allow create, update: if isEditor();  // 登録・編集は editor 以上
-      allow delete: if isSignedIn() && role() == 'admin';
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // 名刺原本画像（詳細表示時のみ読む・一覧クエリから分離）
     match /cardImages/{cardId} {
       allow read: if isSignedIn();
-      allow create, update: if isEditor();
-      allow delete: if isSignedIn() && role() == 'admin';
+      allow write: if isAdmin();
     }
 
     // ユーザー（ロール管理）
