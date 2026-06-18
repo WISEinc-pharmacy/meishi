@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>名刺管理 | ワイズ</title>
+<style>
+  :root{
+    --navy:#1f3a5f; --navy-d:#16293f; --mint:#3bb9a3; --bg:#f4f6f9;
+    --line:#e2e7ee; --text:#1d2733; --sub:#6b7785; --danger:#d0463b; --warn:#c9870a;
+    --r:12px; --sh:0 1px 3px rgba(20,40,70,.08),0 1px 2px rgba(20,40,70,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    background:var(--bg);color:var(--text);-webkit-text-size-adjust:100%}
+  header{background:var(--navy);color:#fff;padding:env(safe-area-inset-top) 0 0;position:sticky;top:0;z-index:20}
+  .hbar{display:flex;align-items:center;gap:10px;padding:12px 16px}
+  .hbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em}
+  .hbar .sp{flex:1}
+  .me{font-size:12px;opacity:.85;display:flex;align-items:center;gap:8px}
+  .btn{appearance:none;border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:600;
+    cursor:pointer;background:var(--mint);color:#fff;transition:.15s;line-height:1}
+  .btn:active{transform:translateY(1px)}
+  .btn[disabled]{opacity:.5;cursor:default}
+  .btn.sec{background:#fff;color:var(--navy);border:1px solid var(--line)}
+  .btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:7px 12px;font-size:13px}
+  .btn.danger{background:var(--danger)}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .wrap{max-width:980px;margin:0 auto;padding:16px;padding-bottom:90px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}
+  .pad{padding:16px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  label.f{display:block;font-size:12px;color:var(--sub);margin:0 0 4px;font-weight:600}
+  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+    font-size:15px;font-family:inherit;background:#fff;color:var(--text)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--mint);outline-offset:-1px;border-color:transparent}
+  textarea{resize:vertical;min-height:64px}
+  .fg{margin-bottom:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+  .tabbar{display:flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px;position:sticky;top:54px;z-index:10}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:9px;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer}
+  .tab.on{background:var(--navy);color:#fff}
+  .hidden{display:none!important}
+  .center{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
+  .drop{border:2px dashed var(--mint);border-radius:14px;padding:28px 16px;text-align:center;background:#fff;cursor:pointer}
+  .drop .big{font-size:40px}
+  .preview{max-width:100%;border-radius:12px;border:1px solid var(--line);display:block;margin:0 auto}
+  .muted{color:var(--sub);font-size:13px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#eef2f7;color:var(--navy)}
+  .st-初回接触{background:#eaf2ff;color:#2a5fb0}
+  .st-商談中{background:#fff3da;color:#9a6a00}
+  .st-見積提出{background:#e9f6ff;color:#1f7fa6}
+  .st-受注{background:#e3f7ee;color:#1f8f5f}
+  .st-失注{background:#fbe9e7;color:#b23b30}
+  .st-保留{background:#eef0f3;color:#5b6675}
+  .list{display:grid;gap:10px}
+  .item{display:flex;gap:12px;align-items:center;padding:12px;cursor:pointer}
+  .item .thumb{width:52px;height:34px;border-radius:6px;object-fit:cover;background:#eef2f7;flex:none}
+  .item .nm{font-weight:700;font-size:15px}
+  .item .co{font-size:12px;color:var(--sub)}
+  .item .sp{flex:1}
+  .search{display:flex;gap:8px;margin-bottom:14px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--navy-d);color:#fff;
+    padding:12px 18px;border-radius:10px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:50;max-width:90%}
+  .banner{background:#fff7e6;border:1px solid #f0d68a;color:#7a5a00;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px}
+  .dupbox{background:#fbe9e7;border:1px solid #f0b8b0;color:#8a2c22;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+  .spin{width:34px;height:34px;border:3px solid #d8e0ea;border-top-color:var(--mint);border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .overlay{position:fixed;inset:0;background:rgba(20,30,45,.55);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px}
+  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+  .fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:15}
+  .fab .btn{box-shadow:0 6px 18px rgba(31,58,95,.35);padding:14px 20px;font-size:15px;border-radius:999px}
+  .detail-img{width:100%;border-radius:10px;border:1px solid var(--line);margin-bottom:12px}
+  .kv{display:flex;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv .k{width:96px;color:var(--sub);flex:none}
+  .kv .v{flex:1;word-break:break-word}
+  a{color:var(--navy)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <h1>名刺管理</h1>
+    <div class="sp"></div>
+    <div id="meBox" class="me hidden"><span id="meName"></span><span id="meRole" class="pill"></span>
+      <button class="btn ghost" id="logoutBtn">ログアウト</button></div>
+  </div>
+</header>
+
+<!-- ログイン -->
+<div id="loginView" class="center">
+  <div style="font-size:48px">📇</div>
+  <h2 style="margin:0">ワイズ 名刺管理</h2>
+  <p class="muted">営業で共有する名刺台帳です。Googleアカウントでログインしてください。</p>
+  <button class="btn" id="loginBtn">Googleでログイン</button>
+  <p id="loginMsg" class="muted"></p>
+</div>
+
+<!-- アプリ -->
+<div id="appView" class="wrap hidden">
+  <div id="setupBanner" class="banner hidden"></div>
+  <div class="tabbar">
+    <div class="tab on" data-tab="capture">＋ 登録</div>
+    <div class="tab" data-tab="list">一覧・検索</div>
+  </div>
+
+  <!-- 登録タブ -->
+  <section id="tab-capture">
+    <div class="card pad">
+      <div id="captureStart">
+        <label for="fileInput" class="drop">
+          <div class="big">📷</div>
+          <div style="font-weight:700;margin-top:6px">名刺を撮影 / 画像を選択</div>
+          <div class="muted" style="margin-top:4px">スマホはカメラが起動します</div>
+        </label>
+        <input id="fileInput" type="file" accept="image/*" capture="environment" class="hidden">
+      </div>
+
+      <div id="captureBusy" class="hidden center" style="min-height:auto;padding:30px">
+        <div class="spin"></div>
+        <div class="muted" id="busyMsg">AIが名刺を読み取っています…</div>
+      </div>
+
+      <!-- 確認・修正フォーム -->
+      <form id="cardForm" class="hidden">
+        <img id="formPreview" class="preview" style="margin-bottom:14px;max-height:220px;object-fit:contain;background:#f0f3f7" alt="">
+        <div id="dupWarn" class="dupbox hidden"></div>
+        <div class="grid2">
+          <div class="fg"><label class="f">氏名 *</label><input name="name" required></div>
+          <div class="fg"><label class="f">フリガナ</label><input name="kana"></div>
+          <div class="fg"><label class="f">会社名 *</label><input name="company" required></div>
+          <div class="fg"><label class="f">部署</label><input name="department"></div>
+          <div class="fg"><label class="f">役職</label><input name="title"></div>
+          <div class="fg"><label class="f">メール</label><input name="email" type="email"></div>
+          <div class="fg"><label class="f">電話</label><input name="phone"></div>
+          <div class="fg"><label class="f">携帯</label><input name="mobile"></div>
+        </div>
+        <div class="fg"><label class="f">住所</label><input name="address"></div>
+        <div class="fg"><label class="f">URL</label><input name="url"></div>
+        <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+        <div class="grid2">
+          <div class="fg"><label class="f">ステータス</label>
+            <select name="status">
+              <option>初回接触</option><option>商談中</option><option>見積提出</option>
+              <option>受注</option><option>失注</option><option>保留</option>
+            </select></div>
+          <div class="fg"><label class="f">次アクション日</label><input name="nextActionDate" type="date"></div>
+        </div>
+        <div class="fg"><label class="f">メモ</label><textarea name="memo"></textarea></div>
+        <div class="row" style="justify-content:flex-end;margin-top:6px">
+          <button type="button" class="btn sec" id="cancelForm">キャンセル</button>
+          <button type="submit" class="btn" id="saveBtn">保存する</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- 一覧タブ -->
+  <section id="tab-list" class="hidden">
+    <div class="search">
+      <input id="searchBox" placeholder="会社名・氏名・部署で検索">
+      <button class="btn sec sm" id="csvBtn">CSV出力</button>
+    </div>
+    <div id="listCount" class="muted" style="margin-bottom:8px"></div>
+    <div id="listArea" class="list"></div>
+  </section>
+</div>
+
+<div id="detailMount"></div>
+<div id="toastMount"></div>
+
+<!-- Firebase compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script>
+// ===== Firebase 設定（wise-meishi 専用プロジェクト）=====
+// ↓ プロジェクト作成後に値を差し替える。未設定なら画面にセットアップ案内を表示。
+const firebaseConfig = {
+  apiKey: "__FIREBASE_API_KEY__",
+  authDomain: "wise-meishi.firebaseapp.com",
+  projectId: "wise-meishi",
+  storageBucket: "wise-meishi.firebasestorage.app",
+};
+const CONFIGURED = !firebaseConfig.apiKey.startsWith("__");
+
+const GEMINI_MODEL = "gemini-2.5-flash"; // Vision対応・低コスト
+
+let auth, db, storage, currentUser=null, userRole="viewer";
+let geminiKey=null, cards=[], pendingImageBlob=null, editingId=null;
+
+const $ = s=>document.querySelector(s);
+const esc = s=> (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  $('#toastMount').appendChild(t);setTimeout(()=>t.remove(),2600);
+}
+
+// ===== 起動 =====
+if(!CONFIGURED){
+  $('#loginView').innerHTML =
+   '<div style="font-size:48px">🛠️</div><h2>セットアップが必要です</h2>'+
+   '<p class="muted" style="max-width:520px">Firebaseプロジェクト <b>wise-meishi</b> を作成し、'+
+   'index.html の firebaseConfig に値を入れてデプロイすると利用できます。<br>'+
+   'README の「セットアップ」を参照してください。</p>';
+}else{
+  firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth(); db=firebase.firestore(); storage=firebase.storage();
+  auth.onAuthStateChanged(onAuth);
+}
+
+$('#loginBtn').onclick=()=>{
+  const p=new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(p).catch(e=>{ $('#loginMsg').textContent='ログイン失敗: '+e.message; });
+};
+$('#logoutBtn').onclick=()=>auth.signOut();
+
+async function onAuth(u){
+  currentUser=u;
+  if(!u){ $('#loginView').classList.remove('hidden'); $('#appView').classList.add('hidden'); $('#meBox').classList.add('hidden'); return; }
+  // ロール取得（無ければ viewer 自己登録）
+  const uref=db.collection('users').doc(u.uid);
+  const snap=await uref.get();
+  if(!snap.exists){ await uref.set({email:u.email,name:u.displayName||u.email,role:'viewer',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); userRole='viewer'; }
+  else userRole=snap.data().role||'viewer';
+  $('#meName').textContent=u.displayName||u.email;
+  $('#meRole').textContent=userRole;
+  $('#meBox').classList.remove('hidden');
+  $('#loginView').classList.add('hidden');
+  $('#appView').classList.remove('hidden');
+  // Geminiキー
+  try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }
+  if(userRole==='viewer'){ $('#setupBanner').textContent='閲覧権限です。登録・編集には管理者に editor 権限の付与を依頼してください。'; $('#setupBanner').classList.remove('hidden'); }
+  if(!geminiKey){ const b=$('#setupBanner'); b.textContent=(b.textContent?b.textContent+' / ':'')+'AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); }
+  await loadCards();
+}
+
+// ===== タブ =====
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  const k=t.dataset.tab;
+  $('#tab-capture').classList.toggle('hidden',k!=='capture');
+  $('#tab-list').classList.toggle('hidden',k!=='list');
+  if(k==='list') renderList();
+});
+
+// ===== 画像選択 → リサイズ → AI読み取り =====
+$('#fileInput').onchange=async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  if(userRole==='viewer'){ toast('登録権限がありません'); return; }
+  const blob=await resizeImage(file,1280);
+  pendingImageBlob=blob;
+  const url=URL.createObjectURL(blob);
+  if(geminiKey){
+    show('busy'); $('#busyMsg').textContent='AIが名刺を読み取っています…';
+    try{
+      const data=await geminiExtract(blob);
+      openForm(data,url);
+    }catch(err){
+      console.error(err);
+      toast('AI読み取りに失敗。手入力してください');
+      openForm({},url);
+    }
+  }else{
+    openForm({},url);
+  }
+  e.target.value='';
+};
+
+function show(state){
+  $('#captureStart').classList.toggle('hidden',state!=='start');
+  $('#captureBusy').classList.toggle('hidden',state!=='busy');
+  $('#cardForm').classList.toggle('hidden',state!=='form');
+}
+
+function resizeImage(file,max){
+  return new Promise((res)=>{
+    const img=new Image(); const u=URL.createObjectURL(file);
+    img.onload=()=>{
+      let{width:w,height:h}=img;
+      if(w>max||h>max){ const r=Math.min(max/w,max/h); w=Math.round(w*r); h=Math.round(h*r); }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(u);
+      c.toBlob(b=>res(b),'image/jpeg',0.85);
+    };
+    img.src=u;
+  });
+}
+
+function blobToBase64(blob){
+  return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(blob); });
+}
+
+async function geminiExtract(blob){
+  const b64=await blobToBase64(blob);
+  const prompt=`この名刺画像から情報を抽出し、JSONで返してください。読み取れない項目は空文字。日本語の名刺です。
+キー: name(氏名), kana(フリガナ), company(会社名), department(部署), title(役職), email, phone(固定/代表電話), mobile(携帯), address(住所), url(WebサイトURL)`;
+  const body={
+    contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],
+    generationConfig:{ responseMimeType:'application/json',
+      responseSchema:{ type:'OBJECT', properties:{
+        name:{type:'STRING'},kana:{type:'STRING'},company:{type:'STRING'},department:{type:'STRING'},
+        title:{type:'STRING'},email:{type:'STRING'},phone:{type:'STRING'},mobile:{type:'STRING'},
+        address:{type:'STRING'},url:{type:'STRING'} } } }
+  };
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok) throw new Error('Gemini '+r.status);
+  const j=await r.json();
+  const txt=j.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+  return JSON.parse(txt);
+}
+
+// ===== フォーム =====
+function openForm(data,imgUrl,id){
+  editingId=id||null;
+  const f=$('#cardForm');
+  f.name.value=data.name||''; f.kana.value=data.kana||''; f.company.value=data.company||'';
+  f.department.value=data.department||''; f.title.value=data.title||''; f.email.value=data.email||'';
+  f.phone.value=data.phone||''; f.mobile.value=data.mobile||''; f.address.value=data.address||'';
+  f.url.value=data.url||''; f.status.value=data.status||'初回接触';
+  f.nextActionDate.value=data.nextActionDate||''; f.memo.value=data.memo||'';
+  $('#formPreview').src=imgUrl||data.imageUrl||'';
+  $('#formPreview').style.display=(imgUrl||data.imageUrl)?'block':'none';
+  $('#dupWarn').classList.add('hidden');
+  show('form');
+  document.querySelector('.tab[data-tab="capture"]').click();
+  checkDup(f.name.value,f.company.value,f.email.value);
+}
+
+['name','company','email'].forEach(n=>{
+  $('#cardForm')[n].addEventListener('blur',()=>{const f=$('#cardForm');checkDup(f.name.value,f.company.value,f.email.value);});
+});
+
+function checkDup(name,company,email){
+  const w=$('#dupWarn');
+  const hits=cards.filter(c=>c.id!==editingId && (
+     (email && c.email && c.email.toLowerCase()===email.toLowerCase()) ||
+     (name && company && c.name===name && c.company===company)));
+  if(hits.length){
+    w.innerHTML='⚠️ 同じ名刺が既に登録されている可能性があります：<br>'+
+      hits.slice(0,3).map(h=>'・'+esc(h.name)+'（'+esc(h.company)+'）').join('<br>');
+    w.classList.remove('hidden');
+  }else w.classList.add('hidden');
+}
+
+$('#cancelForm').onclick=()=>{ pendingImageBlob=null; editingId=null; show('start'); };
+
+$('#cardForm').onsubmit=async e=>{
+  e.preventDefault();
+  if(userRole==='viewer'){ toast('権限がありません'); return; }
+  const f=e.target, btn=$('#saveBtn');
+  btn.disabled=true; btn.textContent='保存中…';
+  try{
+    const rec={
+      name:f.name.value.trim(), kana:f.kana.value.trim(), company:f.company.value.trim(),
+      department:f.department.value.trim(), title:f.title.value.trim(), email:f.email.value.trim(),
+      phone:f.phone.value.trim(), mobile:f.mobile.value.trim(), address:f.address.value.trim(),
+      url:f.url.value.trim(), status:f.status.value, nextActionDate:f.nextActionDate.value, memo:f.memo.value.trim(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    };
+    let id=editingId;
+    if(id){ await db.collection('cards').doc(id).update(rec); }
+    else{
+      rec.createdBy=currentUser.uid; rec.createdByName=currentUser.displayName||currentUser.email;
+      rec.createdAt=firebase.firestore.FieldValue.serverTimestamp();
+      const ref=await db.collection('cards').add(rec); id=ref.id;
+    }
+    if(pendingImageBlob){
+      const path=`cards/${id}/front.jpg`;
+      const snap=await storage.ref(path).put(pendingImageBlob,{contentType:'image/jpeg'});
+      const imageUrl=await snap.ref.getDownloadURL();
+      await db.collection('cards').doc(id).update({imagePath:path,imageUrl});
+    }
+    pendingImageBlob=null; editingId=null;
+    await loadCards();
+    show('start');
+    toast('保存しました');
+    document.querySelector('.tab[data-tab="list"]').click();
+  }catch(err){ console.error(err); toast('保存失敗: '+err.message); }
+  finally{ btn.disabled=false; btn.textContent='保存する'; }
+};
+
+// ===== 一覧・検索 =====
+async function loadCards(){
+  const qs=await db.collection('cards').orderBy('updatedAt','desc').get();
+  cards=qs.docs.map(d=>({id:d.id,...d.data()}));
+  renderList();
+}
+
+$('#searchBox').oninput=renderList;
+
+function renderList(){
+  const q=$('#searchBox').value.trim().toLowerCase();
+  const filtered=!q?cards:cards.filter(c=>
+    [c.name,c.kana,c.company,c.department,c.title,c.email].some(v=>(v||'').toLowerCase().includes(q)));
+  $('#listCount').textContent=`全 ${cards.length} 件`+(q?`（${filtered.length} 件ヒット）`:'');
+  const area=$('#listArea');
+  if(!filtered.length){ area.innerHTML='<div class="muted" style="padding:24px;text-align:center">該当する名刺がありません</div>'; return; }
+  area.innerHTML=filtered.map(c=>`
+    <div class="card item" onclick="openDetail('${c.id}')">
+      ${c.imageUrl?`<img class="thumb" src="${esc(c.imageUrl)}" alt="">`:`<div class="thumb"></div>`}
+      <div>
+        <div class="nm">${esc(c.name||'(無名)')}</div>
+        <div class="co">${esc(c.company||'')}${c.department?' / '+esc(c.department):''}</div>
+      </div>
+      <div class="sp"></div>
+      <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span>
+    </div>`).join('');
+}
+
+// ===== 詳細 =====
+window.openDetail=function(id){
+  const c=cards.find(x=>x.id===id); if(!c) return;
+  const canEdit=userRole==='admin'||userRole==='editor';
+  const kv=(k,v,link)=>v?`<div class="kv"><div class="k">${k}</div><div class="v">${link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(v)}</a>`:esc(v)}</div></div>`:'';
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">${esc(c.name||'')}</h2>
+      <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span></div>
+    <p class="muted" style="margin:4px 0 12px">${esc(c.company||'')}${c.title?' / '+esc(c.title):''}</p>
+    ${c.imageUrl?`<img class="detail-img" src="${esc(c.imageUrl)}" alt="">`:''}
+    ${kv('部署',c.department)}${kv('役職',c.title)}
+    ${kv('メール',c.email,c.email?'mailto:'+c.email:'')}
+    ${kv('電話',c.phone,c.phone?'tel:'+c.phone:'')}
+    ${kv('携帯',c.mobile,c.mobile?'tel:'+c.mobile:'')}
+    ${kv('住所',c.address)}${kv('URL',c.url,c.url)}
+    ${kv('次アクション',c.nextActionDate)}${kv('メモ',c.memo)}
+    ${kv('登録者',c.createdByName)}
+    <div class="row" style="justify-content:flex-end;margin-top:16px">
+      <button class="btn sec" onclick="this.closest('.overlay').remove()">閉じる</button>
+      ${canEdit?`<button class="btn" onclick="editCard('${c.id}')">編集</button>`:''}
+      ${userRole==='admin'?`<button class="btn danger" onclick="delCard('${c.id}')">削除</button>`:''}
+    </div></div>`;
+  $('#detailMount').appendChild(m);
+};
+
+window.editCard=function(id){
+  const c=cards.find(x=>x.id===id); if(!c) return;
+  document.querySelectorAll('.overlay').forEach(o=>o.remove());
+  pendingImageBlob=null;
+  openForm(c,c.imageUrl,id);
+};
+
+window.delCard=async function(id){
+  if(!confirm('この名刺を削除しますか？')) return;
+  try{
+    const c=cards.find(x=>x.id===id);
+    if(c&&c.imagePath){ try{ await storage.ref(c.imagePath).delete(); }catch(e){} }
+    await db.collection('cards').doc(id).delete();
+    document.querySelectorAll('.overlay').forEach(o=>o.remove());
+    await loadCards(); toast('削除しました');
+  }catch(e){ toast('削除失敗: '+e.message); }
+};
+
+// ===== CSV出力 =====
+$('#csvBtn').onclick=()=>{
+  if(!cards.length){ toast('データがありません'); return; }
+  const cols=[['name','氏名'],['kana','フリガナ'],['company','会社名'],['department','部署'],['title','役職'],
+    ['email','メール'],['phone','電話'],['mobile','携帯'],['address','住所'],['url','URL'],
+    ['status','ステータス'],['nextActionDate','次アクション日'],['memo','メモ'],['createdByName','登録者']];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=[cols.map(c=>q(c[1])).join(',')];
+  cards.forEach(c=>rows.push(cols.map(col=>q(c[col[0]])).join(',')));
+  const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='meishi_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+};
+</script>
+</body>
+</html>

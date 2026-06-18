@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// wise-meishi プロジェクト用 Firestoreルール
+// 全営業共有の名刺台帳。認証ユーザーのみアクセス可。
+// ロール: admin / editor / viewer（users コレクションで管理）
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isEditor() {
+      return isSignedIn() && (role() == 'admin' || role() == 'editor');
+    }
+
+    // 名刺データ
+    match /cards/{cardId} {
+      allow read: if isSignedIn();          // 全営業が閲覧・検索
+      allow create, update: if isEditor();  // 登録・編集は editor 以上
+      allow delete: if isSignedIn() && role() == 'admin';
+    }
+
+    // ユーザー（ロール管理）
+    match /users/{uid} {
+      // 自分のレコードは読める。最初のログインで viewer 自己登録のみ許可
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'viewer';
+      // ロール変更は admin のみ
+      allow update, delete: if isSignedIn() && role() == 'admin';
+      // admin は全ユーザー閲覧可
+      allow read: if isSignedIn() && role() == 'admin';
+    }
+
+    // 設定（Geminiキー等）。読み取りは認証ユーザー、書き込みは admin
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && role() == 'admin';
+    }
+  }
+}
