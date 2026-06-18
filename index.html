@@ -231,11 +231,25 @@ if(!CONFIGURED){
   firebase.initializeApp(firebaseConfig);
   auth=firebase.auth(); db=firebase.firestore();
   auth.onAuthStateChanged(onAuth);
+  // リダイレクト方式ログインの結果・エラーを受け取る
+  auth.getRedirectResult().catch(e=>{ $('#loginMsg').textContent='ログイン失敗: '+(e.code||e.message); });
 }
 
-$('#loginBtn').onclick=()=>{
+$('#loginBtn').onclick=async ()=>{
+  $('#loginMsg').textContent='';
   const p=new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(p).catch(e=>{ $('#loginMsg').textContent='ログイン失敗: '+e.message; });
+  try{
+    await auth.signInWithPopup(p);
+  }catch(e){
+    const popupNG=['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code);
+    if(popupNG){
+      // スマホ等でポップアップが使えない場合はリダイレクト方式にフォールバック
+      try{ await auth.signInWithRedirect(p); }
+      catch(e2){ $('#loginMsg').textContent='ログイン失敗: '+(e2.code||e2.message); }
+    }else{
+      $('#loginMsg').textContent='ログイン失敗: '+(e.code||e.message);
+    }
+  }
 };
 $('#logoutBtn').onclick=()=>auth.signOut();
 
