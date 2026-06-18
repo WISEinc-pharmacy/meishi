@@ -174,7 +174,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
 // ===== Firebase 設定（wise-meishi 専用プロジェクト）=====
 // ↓ プロジェクト作成後に値を差し替える。未設定なら画面にセットアップ案内を表示。
@@ -190,7 +189,7 @@ const CONFIGURED = !firebaseConfig.apiKey.startsWith("__");
 
 const GEMINI_MODEL = "gemini-2.5-flash"; // Vision対応・低コスト
 
-let auth, db, storage, currentUser=null, userRole="viewer";
+let auth, db, currentUser=null, userRole="viewer";
 let geminiKey=null, cards=[], pendingImageBlob=null, editingId=null;
 
 const $ = s=>document.querySelector(s);
@@ -210,7 +209,7 @@ if(!CONFIGURED){
    'README の「セットアップ」を参照してください。</p>';
 }else{
   firebase.initializeApp(firebaseConfig);
-  auth=firebase.auth(); db=firebase.firestore(); storage=firebase.storage();
+  auth=firebase.auth(); db=firebase.firestore();
   auth.onAuthStateChanged(onAuth);
 }
 
@@ -297,6 +296,17 @@ function resizeImage(file,max){
 function blobToBase64(blob){
   return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(blob); });
 }
+// Blob → 指定サイズ・品質に縮小した JPEG dataURL（Firestore保存用）
+function blobToResizedDataUrl(blob,max,quality){
+  return new Promise(res=>{
+    const img=new Image(); const u=URL.createObjectURL(blob);
+    img.onload=()=>{ let{width:w,height:h}=img;
+      if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(u);
+      res(c.toDataURL('image/jpeg',quality));
+    }; img.src=u; });
+}
 
 async function geminiExtract(blob){
   const b64=await blobToBase64(blob);
@@ -327,8 +337,8 @@ function openForm(data,imgUrl,id){
   f.phone.value=data.phone||''; f.mobile.value=data.mobile||''; f.address.value=data.address||'';
   f.url.value=data.url||''; f.status.value=data.status||'初回接触';
   f.nextActionDate.value=data.nextActionDate||''; f.memo.value=data.memo||'';
-  $('#formPreview').src=imgUrl||data.imageUrl||'';
-  $('#formPreview').style.display=(imgUrl||data.imageUrl)?'block':'none';
+  $('#formPreview').src=imgUrl||data.thumb||'';
+  $('#formPreview').style.display=(imgUrl||data.thumb)?'block':'none';
   $('#dupWarn').classList.add('hidden');
   show('form');
   document.querySelector('.tab[data-tab="capture"]').click();
@@ -366,6 +376,12 @@ $('#cardForm').onsubmit=async e=>{
       url:f.url.value.trim(), status:f.status.value, nextActionDate:f.nextActionDate.value, memo:f.memo.value.trim(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
+    let thumbUrl=null, fullUrl=null;
+    if(pendingImageBlob){
+      thumbUrl=await blobToResizedDataUrl(pendingImageBlob,220,0.6);   // 一覧用の軽いサムネ(~10KB)
+      fullUrl =await blobToResizedDataUrl(pendingImageBlob,1024,0.78); // 詳細用の原本(1MB制限内)
+      rec.thumb=thumbUrl; rec.hasImage=true;
+    }
     let id=editingId;
     if(id){ await db.collection('cards').doc(id).update(rec); }
     else{
@@ -373,11 +389,8 @@ $('#cardForm').onsubmit=async e=>{
       rec.createdAt=firebase.firestore.FieldValue.serverTimestamp();
       const ref=await db.collection('cards').add(rec); id=ref.id;
     }
-    if(pendingImageBlob){
-      const path=`cards/${id}/front.jpg`;
-      const snap=await storage.ref(path).put(pendingImageBlob,{contentType:'image/jpeg'});
-      const imageUrl=await snap.ref.getDownloadURL();
-      await db.collection('cards').doc(id).update({imagePath:path,imageUrl});
+    if(fullUrl){ // 原本は別コレクションに分離（一覧クエリを軽く保つ）
+      await db.collection('cardImages').doc(id).set({image:fullUrl,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
     }
     pendingImageBlob=null; editingId=null;
     await loadCards();
@@ -406,7 +419,7 @@ function renderList(){
   if(!filtered.length){ area.innerHTML='<div class="muted" style="padding:24px;text-align:center">該当する名刺がありません</div>'; return; }
   area.innerHTML=filtered.map(c=>`
     <div class="card item" onclick="openDetail('${c.id}')">
-      ${c.imageUrl?`<img class="thumb" src="${esc(c.imageUrl)}" alt="">`:`<div class="thumb"></div>`}
+      ${c.thumb?`<img class="thumb" src="${esc(c.thumb)}" alt="">`:`<div class="thumb"></div>`}
       <div>
         <div class="nm">${esc(c.name||'(無名)')}</div>
         <div class="co">${esc(c.company||'')}${c.department?' / '+esc(c.department):''}</div>
@@ -426,7 +439,7 @@ window.openDetail=function(id){
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">${esc(c.name||'')}</h2>
       <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span></div>
     <p class="muted" style="margin:4px 0 12px">${esc(c.company||'')}${c.title?' / '+esc(c.title):''}</p>
-    ${c.imageUrl?`<img class="detail-img" src="${esc(c.imageUrl)}" alt="">`:''}
+    ${(c.thumb||c.hasImage)?`<img class="detail-img" id="detailImg" src="${esc(c.thumb||'')}" alt="">`:''}
     ${kv('部署',c.department)}${kv('役職',c.title)}
     ${kv('メール',c.email,c.email?'mailto:'+c.email:'')}
     ${kv('電話',c.phone,c.phone?'tel:'+c.phone:'')}
@@ -440,20 +453,26 @@ window.openDetail=function(id){
       ${userRole==='admin'?`<button class="btn danger" onclick="delCard('${c.id}')">削除</button>`:''}
     </div></div>`;
   $('#detailMount').appendChild(m);
+  // 原本画像は別コレクションから遅延ロードしてサムネと差し替え
+  if(c.hasImage||c.thumb){
+    db.collection('cardImages').doc(c.id).get().then(d=>{
+      const el=m.querySelector('#detailImg');
+      if(el && d.exists && d.data().image) el.src=d.data().image;
+    }).catch(()=>{});
+  }
 };
 
 window.editCard=function(id){
   const c=cards.find(x=>x.id===id); if(!c) return;
   document.querySelectorAll('.overlay').forEach(o=>o.remove());
   pendingImageBlob=null;
-  openForm(c,c.imageUrl,id);
+  openForm(c,c.thumb,id);
 };
 
 window.delCard=async function(id){
   if(!confirm('この名刺を削除しますか？')) return;
   try{
-    const c=cards.find(x=>x.id===id);
-    if(c&&c.imagePath){ try{ await storage.ref(c.imagePath).delete(); }catch(e){} }
+    try{ await db.collection('cardImages').doc(id).delete(); }catch(e){}
     await db.collection('cards').doc(id).delete();
     document.querySelectorAll('.overlay').forEach(o=>o.remove());
     await loadCards(); toast('削除しました');

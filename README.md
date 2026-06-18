@@ -7,12 +7,13 @@
 - Frontend: 単一HTML（`index.html`）, GitHub Pages配信
 - DB: Firestore直接アクセス（**専用プロジェクト `wise-meishi`**。患者DBと分離）
 - 認証: Firebase Auth（Google OAuth、`wise-meishi`）
-- 画像保管: Firebase Storage（名刺原本）
-- 文字抽出: Gemini Vision API（キーは Firestore `config/gemini` から読込・ソースに含めない）
+- 画像保管: **Firestoreに直接保存**（Storage/Blaze不使用）。一覧用サムネ(~220px)は `cards` ドキュメントに `thumb` として、原本(~1024px)は `cardImages/{id}` に分離保存し一覧クエリを軽く保つ。
+- 文字抽出: Gemini Vision API（model `gemini-2.5-flash`）。キーは Firestore `config/gemini` から読込・ソースに含めない
 
 ## 設計判断
-- **患者DBと同居させない**：患者データは最機微（3省2ガイドライン・罰金リスク）。名刺=第三者PIIは別プロジェクトに隔離し、認証・権限・監査・コンプラ責任分界を独立させる。
-- **Geminiは有料枠キー**：無料枠は入力が学習に使われ得る。名刺は第三者の個人情報のため、課金有効なプロジェクトのキーで「学習不使用」を担保（この使用量なら請求は実質0円）。
+- **患者DBと同居させない**：患者データは最機微（3省2ガイドライン・罰金リスク）。名刺=第三者PIIは別プロジェクト `wise-meishi` に隔離し、認証・権限・監査・コンプラ責任分界を独立させる。
+- **画像はFirestore直接保存（Storage不使用）**：新規プロジェクトのStorageはBlaze課金紐付けが必須。名刺画像は圧縮済で小さく、Firestore無料枠(Spark)に収まるため課金カード登録なしで運用。将来 枚数が万単位 or Drive閲覧が必要になれば Storage/Drive へ移行。
+- **Geminiは無料枠でOK**：名刺は会社の連絡先＝患者データと機微度のレイヤーが異なる、との判断。コードはキーをFirestoreから読むため無料/有料の切替は後戻りコストなし。
 
 ## 公開URL
 https://wiseinc-pharmacy.github.io/meishi/
@@ -31,12 +32,14 @@ https://wiseinc-pharmacy.github.io/meishi/
 
 ## ファイル構成
 - `index.html` — アプリ本体
-- `firestore.rules` — Firestoreセキュリティルール（`meishi` コレクション用）
+- `firestore.rules` — Firestoreセキュリティルール（cards / cardImages / users / config）
 
-## セットアップ（要・コンソール作業）
-1. `wise-patientdb` で Firebase Storage を有効化（バケット未作成なら作成）
-2. Gemini APIキーを `wise-ai-integration` で発行 → HTTPリファラー制限（`wiseinc-pharmacy.github.io`）→ Firestore `config/gemini` に保存
-3. `firestore.rules` を `wise-patientdb` にデプロイ（既存ルールへ `meishi` を追記）
+## セットアップ（コンソール作業・全て完了で稼働）
+1. Firebaseプロジェクト `wise-meishi` 作成・Webアプリ登録 → `firebaseConfig` を index.html に反映（済）
+2. Authentication で Google ログイン有効化＋承認済みドメインに `wiseinc-pharmacy.github.io` を追加
+3. Firestore 作成（asia-northeast1）→ `firestore.rules` を Rules タブに貼り付けて公開
+4. Gemini APIキー発行（無料・Google AI Studio）→ Firestore `config/gemini` の `apiKey` に保存
+5. 初回ログイン後、`users/{uid}` の `role` を `admin` に変更（最初の管理者）
 
 ## 更新履歴
-- 2026-06-18 初版作成（スキャフォールド）
+- 2026-06-18 初版作成。画像はFirestore直接保存方式（Storage不使用）に決定

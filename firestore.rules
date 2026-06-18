@@ -19,10 +19,17 @@ service cloud.firestore {
       return isSignedIn() && (role() == 'admin' || role() == 'editor');
     }
 
-    // 名刺データ
+    // 名刺データ（サムネ込み・一覧で読む）
     match /cards/{cardId} {
       allow read: if isSignedIn();          // 全営業が閲覧・検索
       allow create, update: if isEditor();  // 登録・編集は editor 以上
+      allow delete: if isSignedIn() && role() == 'admin';
+    }
+
+    // 名刺原本画像（詳細表示時のみ読む・一覧クエリから分離）
+    match /cardImages/{cardId} {
+      allow read: if isSignedIn();
+      allow create, update: if isEditor();
       allow delete: if isSignedIn() && role() == 'admin';
     }
 
