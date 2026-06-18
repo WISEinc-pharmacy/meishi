@@ -6,11 +6,30 @@
 <title>名刺管理 | ワイズ</title>
 <style>
   :root{
-    --navy:#1f3a5f; --navy-d:#16293f; --mint:#3bb9a3; --bg:#f4f6f9;
-    --line:#e2e7ee; --text:#1d2733; --sub:#6b7785; --danger:#d0463b; --warn:#c9870a;
-    --r:12px; --sh:0 1px 3px rgba(20,40,70,.08),0 1px 2px rgba(20,40,70,.06);
+    /* === ワイズ標準デザイントークン（design_system.md準拠／未確定時はbrand値を採用） === */
+    --color-primary:#0f766e;        /* ティール：白文字でWCAG AA(4.6:1)。アクション色 */
+    --color-primary-weak:#3bb9a3;   /* ミント：アクセント・薄い装飾 */
+    --color-navy:#1f3a5f;           /* ヘッダー／見出し */
+    --color-navy-dark:#16293f;
+    --color-bg:#f4f6f9;
+    --color-surface:#ffffff;
+    --color-text:#1d2733;
+    --color-text-sub:#6b7785;
+    --color-border:#e2e7ee;
+    --color-danger:#d0463b;
+    --color-warn:#c9870a;
+    --font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem; --text-lg:1.125rem; --text-xl:1.25rem; --text-2xl:1.5rem;
+    --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px; --space-8:32px;
+    --radius-sm:6px; --radius-md:10px; --radius-lg:12px; --radius-xl:16px; --radius-full:9999px;
+    --shadow:0 1px 3px rgba(20,40,70,.08),0 1px 2px rgba(20,40,70,.06);
+    /* 後方互換エイリアス（既存CSSが参照。値は上の標準トークンが源泉） */
+    --navy:var(--color-navy); --navy-d:var(--color-navy-dark); --mint:var(--color-primary);
+    --bg:var(--color-bg); --line:var(--color-border); --text:var(--color-text); --sub:var(--color-text-sub);
+    --danger:var(--color-danger); --warn:var(--color-warn); --r:var(--radius-lg); --sh:var(--shadow);
   }
   *{box-sizing:border-box}
+  :focus-visible{outline:3px solid var(--color-primary);outline-offset:2px;border-radius:4px}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
     background:var(--bg);color:var(--text);-webkit-text-size-adjust:100%}
   header{background:var(--navy);color:#fff;padding:env(safe-area-inset-top) 0 0;position:sticky;top:0;z-index:20}
@@ -84,6 +103,7 @@
     <h1>名刺管理</h1>
     <div class="sp"></div>
     <div id="meBox" class="me hidden"><span id="meName"></span><span id="meRole" class="pill"></span>
+      <button class="btn ghost hidden" id="permBtn">権限管理</button>
       <button class="btn ghost" id="logoutBtn">ログアウト</button></div>
   </div>
 </header>
@@ -219,6 +239,37 @@ $('#loginBtn').onclick=()=>{
 };
 $('#logoutBtn').onclick=()=>auth.signOut();
 
+// ===== 権限管理（admin専用：ユーザー一覧とロール変更）=====
+$('#permBtn').onclick=openPermModal;
+async function openPermModal(){
+  if(userRole!=='admin') return;
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">権限管理</h2>
+      <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
+    <p class="muted" style="margin:6px 0 14px"><b>admin</b>=登録・編集・削除ができます／<b>viewer</b>=閲覧のみ。<br>ログインしたメンバーがここに表示されます（初回ログインで自動的に viewer 登録）。</p>
+    <div id="permList" class="muted">読み込み中…</div></div>`;
+  $('#detailMount').appendChild(m);
+  try{
+    const qs=await db.collection('users').orderBy('email').get();
+    const rows=qs.docs.map(d=>{ const u=d.data(); const me=d.id===currentUser.uid;
+      return `<div class="kv" style="align-items:center;gap:10px">
+        <div class="v"><div style="font-weight:600">${esc(u.name||u.email||'(名称未設定)')}</div>
+          <div class="muted" style="font-size:12px">${esc(u.email||'')}${me?' ・自分':''}</div></div>
+        <select data-uid="${d.id}" style="width:120px;flex:none" ${me?'disabled':''} title="${me?'自分の権限は変更できません':''}">
+          <option value="viewer" ${u.role!=='admin'?'selected':''}>viewer（閲覧）</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin（編集可）</option>
+        </select></div>`; }).join('');
+    m.querySelector('#permList').innerHTML=rows||'まだ誰もログインしていません';
+    m.querySelectorAll('select[data-uid]').forEach(sel=>sel.onchange=async()=>{
+      const uid=sel.dataset.uid, r=sel.value, prev=sel.dataset.prev||sel.value; sel.disabled=true;
+      try{ await db.collection('users').doc(uid).update({role:r}); toast('権限を「'+r+'」に更新しました'); sel.dataset.prev=r; }
+      catch(e){ toast('更新失敗: '+e.message); }
+      finally{ sel.disabled=false; }
+    });
+  }catch(e){ m.querySelector('#permList').textContent='読み込み失敗: '+e.message; }
+}
+
 async function onAuth(u){
   currentUser=u;
   if(!u){ $('#loginView').classList.remove('hidden'); $('#appView').classList.add('hidden'); $('#meBox').classList.add('hidden'); return; }
@@ -243,6 +294,7 @@ async function onAuth(u){
 function applyPermissions(){
   const isAdmin = userRole==='admin';
   document.querySelector('.tab[data-tab="capture"]').style.display = isAdmin ? '' : 'none';
+  $('#permBtn').classList.toggle('hidden', !isAdmin);
   if(!isAdmin){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
