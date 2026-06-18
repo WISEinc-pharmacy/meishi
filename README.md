@@ -26,10 +26,11 @@ https://wiseinc-pharmacy.github.io/meishi/
 - 重複チェック（氏名＋会社 または メール）
 - CSV出力
 
-## 権限
-- 全営業で共有（Firebase Authログイン必須）。**閲覧は全ログインユーザー / 登録・編集・削除は director(admin) のみ**
-- ロール `admin`（=director）以外は自動で `viewer`（閲覧専用）として自己登録。UI上も非adminには登録タブを出さず、Firestoreルールでも書き込みを admin に限定（二重防御）
-- 将来 編集者を増やす場合は、director がコンソールで対象ユーザーの `users/{uid}.role` を `admin` に変更
+## 権限（budget-tool準拠・メールキー方式）
+- 全営業で共有（Firebase Authログイン必須）。**閲覧は全ログインユーザー / 登録・編集・削除・権限変更は admin のみ**
+- `users` コレクションは **メールアドレスがキー**（`users/{email}`）。adminはヘッダーの「権限管理」ボタンから、**メールで事前にユーザー追加・権限付与（admin/viewer）・削除**ができる（その人がログインすると反映）
+- 未登録者は初回ログインで自動 `viewer`（閲覧専用）。UI上も非adminには登録タブ・権限管理ボタンを出さず、Firestoreルールでも write を admin 限定（二重防御）。自分自身の権限変更・削除は不可（ロックアウト防止）
+- **最初の admin（director）はコンソールで1回だけ設定**：Firestore `users/{director@wise-jmco.com}` を作成し `role=admin`（自己昇格防止のためルール上adminしかusersを書けない）
 
 ## 個人情報の扱い（第三者PII）
 - 対象: 営業が収集した名刺情報（取引先の連絡先＝第三者PII）。患者データとは機微度の層が異なる。

@@ -254,35 +254,52 @@ $('#loginBtn').onclick=async ()=>{
 };
 $('#logoutBtn').onclick=()=>auth.signOut();
 
-// ===== 権限管理（admin専用：ユーザー一覧とロール変更）=====
+// ===== 権限管理（admin専用：メールでユーザー追加・権限変更・削除。budget-tool準拠）=====
 $('#permBtn').onclick=openPermModal;
-async function openPermModal(){
+function openPermModal(){
   if(userRole!=='admin') return;
   const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
   m.innerHTML=`<div class="modal pad">
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">権限管理</h2>
       <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
-    <p class="muted" style="margin:6px 0 14px"><b>admin</b>=登録・編集・削除ができます／<b>viewer</b>=閲覧のみ。<br>ログインしたメンバーがここに表示されます（初回ログインで自動的に viewer 登録）。</p>
+    <p class="muted" style="margin:6px 0 12px"><b>admin</b>=登録・編集・削除・権限変更／<b>viewer</b>=閲覧のみ。<br>メールアドレスで事前に追加・権限付与できます（その人がGoogleログインすると反映）。</p>
+    <div class="row" style="gap:8px;margin-bottom:14px">
+      <input id="addUserEmail" type="email" placeholder="メールアドレス" style="flex:1;min-width:0">
+      <select id="addUserRole" style="width:104px;flex:none"><option value="viewer">viewer</option><option value="admin">admin</option></select>
+      <button class="btn sm" id="addUserBtn" style="flex:none">追加</button>
+    </div>
     <div id="permList" class="muted">読み込み中…</div></div>`;
   $('#detailMount').appendChild(m);
+  m.querySelector('#addUserBtn').onclick=addUser;
+  renderUserList();
+}
+async function addUser(){
+  const email=($('#addUserEmail').value||'').trim().toLowerCase(); const role=$('#addUserRole').value;
+  if(!email){ toast('メールアドレスを入力してください'); return; }
+  try{ await db.collection('users').doc(email).set({email,role,createdAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    $('#addUserEmail').value=''; toast(email+' を追加しました'); renderUserList(); }
+  catch(e){ toast('追加失敗: '+(e.code||e.message)); }
+}
+window.changeRole=async function(email,role){ try{ await db.collection('users').doc(email).update({role}); toast('権限を「'+role+'」に更新しました'); }catch(e){ toast('更新失敗: '+(e.code||e.message)); } };
+window.removeUser=async function(email){
+  if(email===currentUser.email){ toast('自分は削除できません'); return; }
+  if(!confirm(email+' を削除しますか？')) return;
+  try{ await db.collection('users').doc(email).delete(); toast('削除しました'); renderUserList(); }catch(e){ toast('削除失敗: '+(e.code||e.message)); }
+};
+async function renderUserList(){
+  const box=$('#permList'); if(!box) return;
   try{
     const qs=await db.collection('users').orderBy('email').get();
-    const rows=qs.docs.map(d=>{ const u=d.data(); const me=d.id===currentUser.uid;
-      return `<div class="kv" style="align-items:center;gap:10px">
-        <div class="v"><div style="font-weight:600">${esc(u.name||u.email||'(名称未設定)')}</div>
-          <div class="muted" style="font-size:12px">${esc(u.email||'')}${me?' ・自分':''}</div></div>
-        <select data-uid="${d.id}" style="width:120px;flex:none" ${me?'disabled':''} title="${me?'自分の権限は変更できません':''}">
-          <option value="viewer" ${u.role!=='admin'?'selected':''}>viewer（閲覧）</option>
-          <option value="admin" ${u.role==='admin'?'selected':''}>admin（編集可）</option>
-        </select></div>`; }).join('');
-    m.querySelector('#permList').innerHTML=rows||'まだ誰もログインしていません';
-    m.querySelectorAll('select[data-uid]').forEach(sel=>sel.onchange=async()=>{
-      const uid=sel.dataset.uid, r=sel.value, prev=sel.dataset.prev||sel.value; sel.disabled=true;
-      try{ await db.collection('users').doc(uid).update({role:r}); toast('権限を「'+r+'」に更新しました'); sel.dataset.prev=r; }
-      catch(e){ toast('更新失敗: '+e.message); }
-      finally{ sel.disabled=false; }
-    });
-  }catch(e){ m.querySelector('#permList').textContent='読み込み失敗: '+e.message; }
+    box.innerHTML=qs.docs.map(d=>{ const u=d.data(); const email=u.email||d.id; const me=email===currentUser.email;
+      return `<div class="kv" style="align-items:center;gap:8px">
+        <div class="v" style="font-size:14px;word-break:break-all">${esc(email)}${me?' ・自分':''}</div>
+        <select onchange="changeRole('${esc(email)}',this.value)" ${me?'disabled':''} style="width:96px;flex:none">
+          <option value="viewer" ${u.role!=='admin'?'selected':''}>viewer</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+        </select>
+        ${me?'<span style="width:46px;flex:none"></span>':`<button class="btn sm" style="flex:none;background:var(--color-danger)" onclick="removeUser('${esc(email)}')">削除</button>`}
+      </div>`; }).join('')||'ユーザーがいません';
+  }catch(e){ box.textContent='読み込み失敗: '+(e.code||e.message); }
 }
 
 async function onAuth(u){
@@ -294,15 +311,15 @@ async function onAuth(u){
   $('#loginView').classList.add('hidden');
   $('#appView').classList.remove('hidden');
   $('#loginMsg').textContent='';
-  // ロール取得（無ければ viewer 自己登録）
+  // ロール取得（usersはメールアドレスをキーに管理＝budget-tool準拠。未登録は viewer 自己登録で全営業が閲覧可）
   userRole='viewer';
   try{
-    const uref=db.collection('users').doc(u.uid);
+    const uref=db.collection('users').doc(u.email);
     const snap=await uref.get();
-    if(!snap.exists){ await uref.set({email:u.email,name:u.displayName||u.email,role:'viewer',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); userRole='viewer'; }
-    else userRole=snap.data().role||'viewer';
+    if(snap.exists){ userRole=snap.data().role||'viewer'; }
+    else{ await uref.set({email:u.email,name:u.displayName||u.email,role:'viewer',createdAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}); userRole='viewer'; }
   }catch(e){
-    const b=$('#setupBanner'); b.textContent='権限情報の取得に失敗しました（'+(e.code||e.message)+'）。Firestoreルールの公開状態を確認してください。'; b.classList.remove('hidden');
+    const b=$('#setupBanner'); b.textContent='権限情報の取得に失敗しました（'+(e.code||e.message)+'）。Firestoreルールが最新版か確認してください。'; b.classList.remove('hidden');
   }
   $('#meRole').textContent=userRole;
   // Geminiキー

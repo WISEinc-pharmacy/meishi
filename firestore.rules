@@ -1,26 +1,21 @@
 rules_version = '2';
 
 // wise-meishi プロジェクト用 Firestoreルール
-// 全営業共有の名刺台帳。認証ユーザーのみアクセス可。
-// ロール: admin / editor / viewer（users コレクションで管理）
+// usersはメールアドレスをキーに管理（budget-tool準拠）。adminがメールで事前にユーザー追加・権限付与・削除できる。
+// 閲覧=全ログインユーザー / 登録・編集・削除・権限変更= admin のみ
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
+    function isSignedIn() { return request.auth != null; }
+    function em() { return request.auth.token.email; }
     function isAdmin() {
-      return isSignedIn() && role() == 'admin';
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(em()))
+        && get(/databases/$(database)/documents/users/$(em())).data.role == 'admin';
     }
 
     // 名刺データ（サムネ込み・一覧で読む）
-    // 閲覧=全ログインユーザー / 登録・編集・削除= director(admin) のみ
     match /cards/{cardId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -32,22 +27,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ユーザー（ロール管理）
-    match /users/{uid} {
-      // 自分のレコードは読める。最初のログインで viewer 自己登録のみ許可
-      allow read: if isSignedIn() && request.auth.uid == uid;
-      allow create: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.role == 'viewer';
-      // ロール変更は admin のみ
-      allow update, delete: if isSignedIn() && role() == 'admin';
-      // admin は全ユーザー閲覧可
-      allow read: if isSignedIn() && role() == 'admin';
+    // ユーザー（メールアドレスがドキュメントID）
+    // ・自分のドキュメントは読める / 未登録者は viewer として自己登録のみ可
+    // ・追加(他人)・権限変更・削除は admin のみ
+    match /users/{email} {
+      allow read: if isSignedIn() && (em() == email || isAdmin());
+      allow create: if isSignedIn() && em() == email && request.resource.data.role == 'viewer';
+      allow create, update, delete: if isAdmin();
     }
 
     // 設定（Geminiキー等）。読み取りは認証ユーザー、書き込みは admin
     match /config/{doc} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && role() == 'admin';
+      allow write: if isAdmin();
     }
   }
 }
