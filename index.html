@@ -273,32 +273,37 @@ function openPermModal(){
   m.querySelector('#addUserBtn').onclick=addUser;
   renderUserList();
 }
+function validEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 async function addUser(){
   const email=($('#addUserEmail').value||'').trim().toLowerCase(); const role=$('#addUserRole').value;
   if(!email){ toast('メールアドレスを入力してください'); return; }
+  if(!validEmail(email)){ toast('メールアドレスの形式が正しくありません'); return; }
   try{ await db.collection('users').doc(email).set({email,role,createdAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     $('#addUserEmail').value=''; toast(email+' を追加しました'); renderUserList(); }
   catch(e){ toast('追加失敗: '+(e.code||e.message)); }
 }
-window.changeRole=async function(email,role){ try{ await db.collection('users').doc(email).update({role}); toast('権限を「'+role+'」に更新しました'); }catch(e){ toast('更新失敗: '+(e.code||e.message)); } };
-window.removeUser=async function(email){
+async function changeRole(email,role){ try{ await db.collection('users').doc(email).update({role}); toast('権限を「'+role+'」に更新しました'); }catch(e){ toast('更新失敗: '+(e.code||e.message)); } }
+async function removeUser(email){
   if(email===currentUser.email){ toast('自分は削除できません'); return; }
   if(!confirm(email+' を削除しますか？')) return;
   try{ await db.collection('users').doc(email).delete(); toast('削除しました'); renderUserList(); }catch(e){ toast('削除失敗: '+(e.code||e.message)); }
-};
+}
 async function renderUserList(){
   const box=$('#permList'); if(!box) return;
   try{
     const qs=await db.collection('users').orderBy('email').get();
+    // インラインハンドラは使わず data-email + プログラムでリスナー付与（XSS回避）
     box.innerHTML=qs.docs.map(d=>{ const u=d.data(); const email=u.email||d.id; const me=email===currentUser.email;
       return `<div class="kv" style="align-items:center;gap:8px">
         <div class="v" style="font-size:14px;word-break:break-all">${esc(email)}${me?' ・自分':''}</div>
-        <select onchange="changeRole('${esc(email)}',this.value)" ${me?'disabled':''} style="width:96px;flex:none">
+        <select class="role-sel" data-email="${esc(email)}" ${me?'disabled':''} style="width:96px;flex:none">
           <option value="viewer" ${u.role!=='admin'?'selected':''}>viewer</option>
           <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         </select>
-        ${me?'<span style="width:46px;flex:none"></span>':`<button class="btn sm" style="flex:none;background:var(--color-danger)" onclick="removeUser('${esc(email)}')">削除</button>`}
+        ${me?'<span style="width:46px;flex:none"></span>':`<button class="btn sm rm-btn" data-email="${esc(email)}" style="flex:none;background:var(--color-danger)">削除</button>`}
       </div>`; }).join('')||'ユーザーがいません';
+    box.querySelectorAll('.role-sel').forEach(s=>s.onchange=()=>changeRole(s.dataset.email,s.value));
+    box.querySelectorAll('.rm-btn').forEach(b=>b.onclick=()=>removeUser(b.dataset.email));
   }catch(e){ box.textContent='読み込み失敗: '+(e.code||e.message); }
 }
 
