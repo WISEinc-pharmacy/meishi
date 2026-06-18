@@ -321,6 +321,8 @@ async function onAuth(u){
   }catch(e){
     const b=$('#setupBanner'); b.textContent='権限情報の取得に失敗しました（'+(e.code||e.message)+'）。Firestoreルールが最新版か確認してください。'; b.classList.remove('hidden');
   }
+  // オーナー(director)は常にadmin（コンソール設定不要）。usersにもadminで反映しておく
+  if(u.email==='director@wise-jmco.com'){ userRole='admin'; try{ await db.collection('users').doc(u.email).set({email:u.email,name:u.displayName||u.email,role:'admin'},{merge:true}); }catch(e){} }
   $('#meRole').textContent=userRole;
   // Geminiキー
   try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }

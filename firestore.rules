@@ -9,10 +9,13 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function em() { return request.auth.token.email; }
+    // director@wise-jmco.com は常にadmin（オーナー固定・コンソール設定不要）。他はusersドキュメントのroleで判定。
     function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(em()))
-        && get(/databases/$(database)/documents/users/$(em())).data.role == 'admin';
+      return isSignedIn() && (
+        em() == 'director@wise-jmco.com'
+        || (exists(/databases/$(database)/documents/users/$(em()))
+            && get(/databases/$(database)/documents/users/$(em())).data.role == 'admin')
+      );
     }
 
     // 名刺データ（サムネ込み・一覧で読む）
