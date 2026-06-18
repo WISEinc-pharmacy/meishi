@@ -287,21 +287,28 @@ async function openPermModal(){
 async function onAuth(u){
   currentUser=u;
   if(!u){ $('#loginView').classList.remove('hidden'); $('#appView').classList.add('hidden'); $('#meBox').classList.add('hidden'); return; }
-  // ロール取得（無ければ viewer 自己登録）
-  const uref=db.collection('users').doc(u.uid);
-  const snap=await uref.get();
-  if(!snap.exists){ await uref.set({email:u.email,name:u.displayName||u.email,role:'viewer',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); userRole='viewer'; }
-  else userRole=snap.data().role||'viewer';
+  // ログイン成功→まずアプリ画面を表示（Firestore通信の失敗でログイン画面に固まらないように）
   $('#meName').textContent=u.displayName||u.email;
-  $('#meRole').textContent=userRole;
   $('#meBox').classList.remove('hidden');
   $('#loginView').classList.add('hidden');
   $('#appView').classList.remove('hidden');
+  $('#loginMsg').textContent='';
+  // ロール取得（無ければ viewer 自己登録）
+  userRole='viewer';
+  try{
+    const uref=db.collection('users').doc(u.uid);
+    const snap=await uref.get();
+    if(!snap.exists){ await uref.set({email:u.email,name:u.displayName||u.email,role:'viewer',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); userRole='viewer'; }
+    else userRole=snap.data().role||'viewer';
+  }catch(e){
+    const b=$('#setupBanner'); b.textContent='権限情報の取得に失敗しました（'+(e.code||e.message)+'）。Firestoreルールの公開状態を確認してください。'; b.classList.remove('hidden');
+  }
+  $('#meRole').textContent=userRole;
   // Geminiキー
   try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }
-  if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); b.textContent='AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); }
+  if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); if(!b.textContent){ b.textContent='AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); } }
   applyPermissions();
-  await loadCards();
+  try{ await loadCards(); }catch(e){ toast('一覧取得に失敗: '+(e.code||e.message)); }
 }
 
 // ===== 権限適用（編集できるのは director(admin) のみ・他は閲覧専用）=====
