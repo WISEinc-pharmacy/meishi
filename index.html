@@ -104,6 +104,7 @@
     <h1>名刺管理</h1>
     <div class="sp"></div>
     <div id="meBox" class="me hidden"><span id="meName"></span><span id="meRole" class="pill"></span>
+      <button class="btn ghost" id="helpBtn">使い方</button>
       <button class="btn ghost hidden" id="keyBtn">AI読み取りキー</button>
       <button class="btn ghost hidden" id="permBtn">権限管理</button>
       <button class="btn ghost" id="logoutBtn">ログアウト</button></div>
@@ -278,6 +279,42 @@ $('#loginBtn').onclick=async ()=>{
   }
 };
 $('#logoutBtn').onclick=()=>auth.signOut();
+
+// ===== 使い方（全員に表示）=====
+$('#helpBtn').onclick=openHelp;
+function openHelp(){
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <div class="row" style="align-items:center;margin-bottom:6px"><h2 style="margin:0;flex:1">使い方</h2>
+      <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
+
+    <h3 style="margin:14px 0 6px;font-size:15px">📷 名刺を登録する<span class="muted" style="font-weight:400;font-size:12px">（管理者のみ）</span></h3>
+    <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
+      <li>上部の「<b>＋ 登録</b>」タブを開く</li>
+      <li>「<b>表面</b>」をタップして名刺を撮影（スマホはカメラが起動します）</li>
+      <li>裏面があれば「<b>裏面（任意）</b>」も撮影（英語面・QRなど）</li>
+      <li>青い「<b>AIで読み取って入力へ</b>」ボタンを押す　← これでAIが文字を読み取ります</li>
+      <li>表示された氏名・会社などを<b>確認・修正</b></li>
+      <li>「<b>保存する</b>」を押す（同じ名刺が既にあると警告が出ます）</li>
+    </ol>
+
+    <h3 style="margin:16px 0 6px;font-size:15px">🔍 名刺を見る・探す<span class="muted" style="font-weight:400;font-size:12px">（全員）</span></h3>
+    <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
+      <li>「<b>一覧・検索</b>」タブを開く</li>
+      <li>検索ボックスに<b>会社名・氏名・部署</b>などを入力すると絞り込めます</li>
+      <li>カードをタップすると<b>詳細</b>（電話・メール・名刺画像の表裏）が見られます</li>
+      <li>「<b>CSV出力</b>」で一覧をダウンロードできます</li>
+    </ol>
+
+    <h3 style="margin:16px 0 6px;font-size:15px">💡 ヒント</h3>
+    <ul style="margin:0 0 4px 18px;padding:0;line-height:1.9">
+      <li>営業フォロー：詳細の「編集」でステータス（商談中など）・次アクション日・メモを記録できます（管理者）</li>
+      <li>うまく読み取れない時：明るい場所で、名刺を平らに、枠いっぱいに写すと精度が上がります</li>
+      <li>編集・登録・削除ができるのは<b>管理者</b>のみ／閲覧は<b>全員</b>できます</li>
+    </ul>
+  </div>`;
+  $('#detailMount').appendChild(m);
+}
 
 // ===== AI読み取りキー（admin専用：Gemini APIキーを config/gemini に登録）=====
 $('#keyBtn').onclick=openKeyModal;
