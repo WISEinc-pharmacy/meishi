@@ -104,6 +104,7 @@
     <h1>名刺管理</h1>
     <div class="sp"></div>
     <div id="meBox" class="me hidden"><span id="meName"></span><span id="meRole" class="pill"></span>
+      <button class="btn ghost hidden" id="keyBtn">AI読み取りキー</button>
       <button class="btn ghost hidden" id="permBtn">権限管理</button>
       <button class="btn ghost" id="logoutBtn">ログアウト</button></div>
   </div>
@@ -254,6 +255,37 @@ $('#loginBtn').onclick=async ()=>{
 };
 $('#logoutBtn').onclick=()=>auth.signOut();
 
+// ===== AI読み取りキー（admin専用：Gemini APIキーを config/gemini に登録）=====
+$('#keyBtn').onclick=openKeyModal;
+function openKeyModal(){
+  if(userRole!=='admin') return;
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">AI読み取りキー</h2>
+      <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
+    <p class="muted" style="margin:6px 0 12px">名刺の自動読み取りに使う Gemini APIキーを登録します。<br>Google AI Studio（無料）で発行したキーを貼り付けてください。状態: <b>${geminiKey?'設定済み':'未設定'}</b></p>
+    <div class="row" style="gap:8px;margin-bottom:6px">
+      <input id="keyInput" type="password" placeholder="AIza..." style="flex:1;min-width:0" autocomplete="off">
+      <button class="btn sm" id="saveKeyBtn" style="flex:none">保存</button>
+    </div>
+    <p id="keyMsg" class="muted" style="margin:4px 0 0;font-size:13px"></p></div>`;
+  $('#detailMount').appendChild(m);
+  m.querySelector('#saveKeyBtn').onclick=saveKey;
+}
+async function saveKey(){
+  const v=($('#keyInput').value||'').trim();
+  const msg=$('#keyMsg');
+  if(!v){ msg.textContent='キーを入力してください'; return; }
+  if(!/^AIza[\w-]{20,}$/.test(v)){ msg.textContent='キーの形式が正しくないようです（AIza で始まる文字列）'; return; }
+  try{
+    await db.collection('config').doc('gemini').set({apiKey:v,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    geminiKey=v;
+    const b=$('#setupBanner'); b.textContent=''; b.classList.add('hidden');
+    toast('AI読み取りキーを登録しました'); msg.textContent='登録しました。';
+    setTimeout(()=>{ const ov=document.querySelector('.overlay'); if(ov) ov.remove(); }, 900);
+  }catch(e){ msg.textContent='保存失敗: '+(e.code||e.message); }
+}
+
 // ===== 権限管理（admin専用：メールでユーザー追加・権限変更・削除。budget-tool準拠）=====
 $('#permBtn').onclick=openPermModal;
 function openPermModal(){
@@ -331,7 +363,7 @@ async function onAuth(u){
   $('#meRole').textContent=userRole;
   // Geminiキー
   try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }
-  if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); if(!b.textContent){ b.textContent='AI読み取りキー(config/gemini)が未設定です。手入力で登録できます。'; b.classList.remove('hidden'); } }
+  if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); if(!b.textContent){ b.textContent='AI読み取りキーが未設定です。右上の「AI読み取りキー」ボタンから登録してください。'; b.classList.remove('hidden'); } }
   applyPermissions();
   try{ await loadCards(); }catch(e){ toast('一覧取得に失敗: '+(e.code||e.message)); }
 }
@@ -341,6 +373,7 @@ function applyPermissions(){
   const isAdmin = userRole==='admin';
   document.querySelector('.tab[data-tab="capture"]').style.display = isAdmin ? '' : 'none';
   $('#permBtn').classList.toggle('hidden', !isAdmin);
+  $('#keyBtn').classList.toggle('hidden', !isAdmin);
   if(!isAdmin){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
