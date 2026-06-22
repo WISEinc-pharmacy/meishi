@@ -276,7 +276,8 @@ async function saveKey(){
   const v=($('#keyInput').value||'').trim();
   const msg=$('#keyMsg');
   if(!v){ msg.textContent='キーを入力してください'; return; }
-  if(!/^AIza[\w-]{20,}$/.test(v)){ msg.textContent='キーの形式が正しくないようです（AIza で始まる文字列）'; return; }
+  // Geminiキーは AIza… (旧) と AQ.… (新) の2形式がある。空白なし・一定長を満たせば許可
+  if(/\s/.test(v) || !/^[A-Za-z0-9_.\-]{20,}$/.test(v)){ msg.textContent='キーの形式が正しくないようです（余分な空白が混ざっていないか確認してください）'; return; }
   try{
     await db.collection('config').doc('gemini').set({apiKey:v,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     geminiKey=v;
