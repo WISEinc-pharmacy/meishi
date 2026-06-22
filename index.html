@@ -131,12 +131,23 @@
   <section id="tab-capture">
     <div class="card pad">
       <div id="captureStart">
-        <label for="fileInput" class="drop">
-          <div class="big">📷</div>
-          <div style="font-weight:700;margin-top:6px">名刺を撮影 / 画像を選択</div>
-          <div class="muted" style="margin-top:4px">スマホはカメラが起動します</div>
-        </label>
-        <input id="fileInput" type="file" accept="image/*" capture="environment" class="hidden">
+        <div class="row" style="gap:10px;align-items:stretch">
+          <label for="frontInput" class="drop" style="flex:1;min-width:0">
+            <div class="big">📷</div>
+            <div style="font-weight:700;margin-top:6px">表面 <span style="color:var(--mint)">*</span></div>
+            <div class="muted" id="frontHint" style="margin-top:4px">タップで撮影/選択</div>
+            <img id="frontPrev" class="hidden" style="max-height:90px;margin:8px auto 0;border-radius:8px;display:block" alt="">
+          </label>
+          <label for="backInput" class="drop" style="flex:1;min-width:0">
+            <div class="big">🔄</div>
+            <div style="font-weight:700;margin-top:6px">裏面（任意）</div>
+            <div class="muted" id="backHint" style="margin-top:4px">英語面・QR等</div>
+            <img id="backPrev" class="hidden" style="max-height:90px;margin:8px auto 0;border-radius:8px;display:block" alt="">
+          </label>
+        </div>
+        <input id="frontInput" type="file" accept="image/*" capture="environment" class="hidden">
+        <input id="backInput" type="file" accept="image/*" capture="environment" class="hidden">
+        <button class="btn" id="readBtn" style="margin-top:14px;width:100%" disabled>AIで読み取って入力へ</button>
       </div>
 
       <div id="captureBusy" class="hidden center" style="min-height:auto;padding:30px">
@@ -146,7 +157,20 @@
 
       <!-- 確認・修正フォーム -->
       <form id="cardForm" class="hidden">
-        <img id="formPreview" class="preview" style="margin-bottom:14px;max-height:220px;object-fit:contain;background:#f0f3f7" alt="">
+        <div class="row" style="gap:10px;margin-bottom:14px;align-items:flex-start">
+          <div style="flex:1;min-width:0;text-align:center">
+            <div class="muted" style="font-size:12px;margin-bottom:4px">表面</div>
+            <img id="formPreview" class="preview" style="max-height:170px;object-fit:contain;background:#f0f3f7" alt="">
+          </div>
+          <div style="flex:1;min-width:0;text-align:center">
+            <div class="muted" style="font-size:12px;margin-bottom:4px">裏面</div>
+            <label for="formBackInput" style="display:block;cursor:pointer">
+              <img id="formBackPreview" class="preview" style="max-height:170px;object-fit:contain;background:#f0f3f7;display:none" alt="">
+              <span id="formBackEmpty" class="muted" style="display:flex;align-items:center;justify-content:center;height:90px;border:2px dashed var(--line);border-radius:12px;font-size:13px">＋ 裏面を追加</span>
+            </label>
+            <input id="formBackInput" type="file" accept="image/*" capture="environment" class="hidden">
+          </div>
+        </div>
         <div id="dupWarn" class="dupbox hidden"></div>
         <div class="grid2">
           <div class="fg"><label class="f">氏名 *</label><input name="name" required></div>
@@ -212,7 +236,7 @@ const CONFIGURED = !firebaseConfig.apiKey.startsWith("__");
 const GEMINI_MODEL = "gemini-2.5-flash"; // Vision対応・低コスト
 
 let auth, db, currentUser=null, userRole="viewer";
-let geminiKey=null, cards=[], pendingImageBlob=null, editingId=null;
+let geminiKey=null, cards=[], pendingFront=null, pendingBack=null, editingId=null;
 
 const $ = s=>document.querySelector(s);
 const esc = s=> (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -393,27 +417,44 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if(k==='list') renderList();
 });
 
-// ===== 画像選択 → リサイズ → AI読み取り =====
-$('#fileInput').onchange=async e=>{
+// ===== 画像選択（表/裏） → リサイズ → AI読み取り =====
+async function pickSide(e,which){
   const file=e.target.files[0]; if(!file) return;
   if(userRole!=='admin'){ toast('編集できるのは director のみです'); return; }
   const blob=await resizeImage(file,1280);
-  pendingImageBlob=blob;
   const url=URL.createObjectURL(blob);
+  if(which==='front'){ pendingFront=blob; setSlot('#frontPrev','#frontHint',url); }
+  else{ pendingBack=blob; setSlot('#backPrev','#backHint',url); }
+  $('#readBtn').disabled=!pendingFront;
+  e.target.value='';
+}
+$('#frontInput').onchange=e=>pickSide(e,'front');
+$('#backInput').onchange=e=>pickSide(e,'back');
+function setSlot(imgSel,hintSel,url){ const im=$(imgSel); im.src=url; im.classList.remove('hidden'); $(hintSel).textContent='✓ 選択済み（タップで撮り直し）'; }
+function resetStart(){
+  pendingFront=null; pendingBack=null;
+  ['#frontPrev','#backPrev'].forEach(s=>{const im=$(s); im.src=''; im.classList.add('hidden');});
+  $('#frontHint').textContent='タップで撮影/選択'; $('#backHint').textContent='英語面・QR等';
+  $('#readBtn').disabled=true;
+}
+
+$('#readBtn').onclick=async ()=>{
+  if(!pendingFront){ toast('表面を撮影してください'); return; }
+  const frontUrl=URL.createObjectURL(pendingFront);
+  const backUrl=pendingBack?URL.createObjectURL(pendingBack):'';
   if(geminiKey){
     show('busy'); $('#busyMsg').textContent='AIが名刺を読み取っています…';
     try{
-      const data=await geminiExtract(blob);
-      openForm(data,url);
+      const data=await geminiExtract(pendingFront,pendingBack);
+      openForm(data,frontUrl,null,backUrl);
     }catch(err){
       console.error(err);
       toast('AI読み取りに失敗。手入力してください');
-      openForm({},url);
+      openForm({},frontUrl,null,backUrl);
     }
   }else{
-    openForm({},url);
+    openForm({},frontUrl,null,backUrl);
   }
-  e.target.value='';
 };
 
 function show(state){
@@ -452,12 +493,14 @@ function blobToResizedDataUrl(blob,max,quality){
     }; img.src=u; });
 }
 
-async function geminiExtract(blob){
-  const b64=await blobToBase64(blob);
-  const prompt=`この名刺画像から情報を抽出し、JSONで返してください。読み取れない項目は空文字。日本語の名刺です。
+async function geminiExtract(front,back){
+  const prompt=`名刺画像から情報を抽出し、JSONで返してください。読み取れない項目は空文字。
+画像が2枚ある場合は「1枚目=表面・2枚目=裏面（英語表記や追加連絡先のことが多い）」です。両面の情報を統合し、日本語面を主としつつ裏面で不足を補ってください。
 キー: name(氏名), kana(フリガナ), company(会社名), department(部署), title(役職), email, phone(固定/代表電話), mobile(携帯), address(住所), url(WebサイトURL)`;
+  const parts=[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:await blobToBase64(front)}}];
+  if(back) parts.push({inline_data:{mime_type:'image/jpeg',data:await blobToBase64(back)}});
   const body={
-    contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],
+    contents:[{parts}],
     generationConfig:{ responseMimeType:'application/json',
       responseSchema:{ type:'OBJECT', properties:{
         name:{type:'STRING'},kana:{type:'STRING'},company:{type:'STRING'},department:{type:'STRING'},
@@ -473,7 +516,7 @@ async function geminiExtract(blob){
 }
 
 // ===== フォーム =====
-function openForm(data,imgUrl,id){
+function openForm(data,imgUrl,id,backUrl){
   editingId=id||null;
   const f=$('#cardForm');
   f.name.value=data.name||''; f.kana.value=data.kana||''; f.company.value=data.company||'';
@@ -483,11 +526,24 @@ function openForm(data,imgUrl,id){
   f.nextActionDate.value=data.nextActionDate||''; f.memo.value=data.memo||'';
   $('#formPreview').src=imgUrl||data.thumb||'';
   $('#formPreview').style.display=(imgUrl||data.thumb)?'block':'none';
+  setFormBack(backUrl||'');
   $('#dupWarn').classList.add('hidden');
   show('form');
   document.querySelector('.tab[data-tab="capture"]').click();
   checkDup(f.name.value,f.company.value,f.email.value);
 }
+function setFormBack(url){
+  const bp=$('#formBackPreview'), be=$('#formBackEmpty');
+  if(url){ bp.src=url; bp.style.display='block'; be.style.display='none'; }
+  else{ bp.src=''; bp.style.display='none'; be.style.display='flex'; }
+}
+$('#formBackInput').onchange=async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  if(userRole!=='admin'){ toast('編集できるのは director のみです'); return; }
+  pendingBack=await resizeImage(file,1280);
+  setFormBack(URL.createObjectURL(pendingBack));
+  e.target.value='';
+};
 
 ['name','company','email'].forEach(n=>{
   $('#cardForm')[n].addEventListener('blur',()=>{const f=$('#cardForm');checkDup(f.name.value,f.company.value,f.email.value);});
@@ -505,7 +561,7 @@ function checkDup(name,company,email){
   }else w.classList.add('hidden');
 }
 
-$('#cancelForm').onclick=()=>{ pendingImageBlob=null; editingId=null; show('start'); };
+$('#cancelForm').onclick=()=>{ editingId=null; resetStart(); show('start'); };
 
 $('#cardForm').onsubmit=async e=>{
   e.preventDefault();
@@ -520,12 +576,14 @@ $('#cardForm').onsubmit=async e=>{
       url:f.url.value.trim(), status:f.status.value, nextActionDate:f.nextActionDate.value, memo:f.memo.value.trim(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
-    let thumbUrl=null, fullUrl=null;
-    if(pendingImageBlob){
-      thumbUrl=await blobToResizedDataUrl(pendingImageBlob,220,0.6);   // 一覧用の軽いサムネ(~10KB)
-      fullUrl =await blobToResizedDataUrl(pendingImageBlob,1024,0.78); // 詳細用の原本(1MB制限内)
-      rec.thumb=thumbUrl; rec.hasImage=true;
+    // 表面：新規撮影時のみサムネ・原本を作る（編集で撮り直さなければ既存を保持）
+    let frontFull=null, backFull=null;
+    if(pendingFront){
+      rec.thumb=await blobToResizedDataUrl(pendingFront,220,0.6);   // 一覧用の軽いサムネ(~10KB)
+      frontFull=await blobToResizedDataUrl(pendingFront,1024,0.78); // 詳細用の原本(1MB制限内)
+      rec.hasImage=true;
     }
+    if(pendingBack){ backFull=await blobToResizedDataUrl(pendingBack,1024,0.78); rec.hasBack=true; }
     let id=editingId;
     if(id){ await db.collection('cards').doc(id).update(rec); }
     else{
@@ -533,10 +591,15 @@ $('#cardForm').onsubmit=async e=>{
       rec.createdAt=firebase.firestore.FieldValue.serverTimestamp();
       const ref=await db.collection('cards').add(rec); id=ref.id;
     }
-    if(fullUrl){ // 原本は別コレクションに分離（一覧クエリを軽く保つ）
-      await db.collection('cardImages').doc(id).set({image:fullUrl,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    // 原本は別コレクションに分離（一覧クエリを軽く保つ）。merge:true で表/裏の片方更新時に他方を消さない
+    const imgUpd={};
+    if(frontFull) imgUpd.image=frontFull;
+    if(backFull) imgUpd.imageBack=backFull;
+    if(Object.keys(imgUpd).length){
+      imgUpd.updatedAt=firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('cardImages').doc(id).set(imgUpd,{merge:true});
     }
-    pendingImageBlob=null; editingId=null;
+    resetStart(); editingId=null;
     await loadCards();
     show('start');
     toast('保存しました');
@@ -583,7 +646,8 @@ window.openDetail=function(id){
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">${esc(c.name||'')}</h2>
       <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span></div>
     <p class="muted" style="margin:4px 0 12px">${esc(c.company||'')}${c.title?' / '+esc(c.title):''}</p>
-    ${(c.thumb||c.hasImage)?`<img class="detail-img" id="detailImg" src="${esc(c.thumb||'')}" alt="">`:''}
+    ${(c.thumb||c.hasImage)?`<img class="detail-img" id="detailImg" src="${esc(c.thumb||'')}" alt="表面">`:''}
+    ${c.hasBack?`<img class="detail-img" id="detailImgBack" src="" alt="裏面">`:''}
     ${kv('部署',c.department)}${kv('役職',c.title)}
     ${kv('メール',c.email,c.email?'mailto:'+c.email:'')}
     ${kv('電話',c.phone,c.phone?'tel:'+c.phone:'')}
@@ -597,11 +661,12 @@ window.openDetail=function(id){
       ${userRole==='admin'?`<button class="btn danger" onclick="delCard('${c.id}')">削除</button>`:''}
     </div></div>`;
   $('#detailMount').appendChild(m);
-  // 原本画像は別コレクションから遅延ロードしてサムネと差し替え
-  if(c.hasImage||c.thumb){
+  // 原本画像（表/裏）は別コレクションから遅延ロードしてサムネと差し替え
+  if(c.hasImage||c.thumb||c.hasBack){
     db.collection('cardImages').doc(c.id).get().then(d=>{
-      const el=m.querySelector('#detailImg');
-      if(el && d.exists && d.data().image) el.src=d.data().image;
+      if(!d.exists) return; const data=d.data();
+      const ef=m.querySelector('#detailImg'); if(ef && data.image) ef.src=data.image;
+      const eb=m.querySelector('#detailImgBack'); if(eb && data.imageBack) eb.src=data.imageBack;
     }).catch(()=>{});
   }
 };
@@ -609,8 +674,14 @@ window.openDetail=function(id){
 window.editCard=function(id){
   const c=cards.find(x=>x.id===id); if(!c) return;
   document.querySelectorAll('.overlay').forEach(o=>o.remove());
-  pendingImageBlob=null;
-  openForm(c,c.thumb,id);
+  pendingFront=null; pendingBack=null;
+  openForm(c,c.thumb,id,'');
+  // 裏面の原本を読み込んでプレビュー表示（撮り直さなければ保存時も保持）
+  if(c.hasBack){
+    db.collection('cardImages').doc(id).get().then(d=>{
+      if(d.exists && d.data().imageBack) setFormBack(d.data().imageBack);
+    }).catch(()=>{});
+  }
 };
 
 window.delCard=async function(id){
