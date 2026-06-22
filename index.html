@@ -257,8 +257,8 @@ if(!CONFIGURED){
   firebase.initializeApp(firebaseConfig);
   auth=firebase.auth(); db=firebase.firestore();
   auth.onAuthStateChanged(onAuth);
-  // リダイレクト方式ログインの結果・エラーを受け取る
-  auth.getRedirectResult().catch(e=>{ $('#loginMsg').textContent='ログイン失敗: '+(e.code||e.message); });
+  // ※ signInWithRedirect は使わない（GitHub Pages＋ストレージ分割ブラウザで
+  //   "missing initial state" エラーになるため）。ログインはポップアップ方式に統一。
 }
 
 $('#loginBtn').onclick=async ()=>{
@@ -267,11 +267,11 @@ $('#loginBtn').onclick=async ()=>{
   try{
     await auth.signInWithPopup(p);
   }catch(e){
-    const popupNG=['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code);
-    if(popupNG){
-      // スマホ等でポップアップが使えない場合はリダイレクト方式にフォールバック
-      try{ await auth.signInWithRedirect(p); }
-      catch(e2){ $('#loginMsg').textContent='ログイン失敗: '+(e2.code||e2.message); }
+    // リダイレクト方式は GitHub Pages で壊れるため使わない。塞がれている場合は許可を促す。
+    if(['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code)){
+      $('#loginMsg').textContent='ポップアップがブロックされました。ブラウザのポップアップを許可して、もう一度「Googleでログイン」を押してください。';
+    }else if(e.code==='auth/popup-closed-by-user'){
+      $('#loginMsg').textContent='ログインがキャンセルされました。もう一度お試しください。';
     }else{
       $('#loginMsg').textContent='ログイン失敗: '+(e.code||e.message);
     }
@@ -305,6 +305,7 @@ async function saveKey(){
   try{
     await db.collection('config').doc('gemini').set({apiKey:v,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     geminiKey=v;
+    $('#keyBtn').classList.add('hidden');   // 設定済みになったらボタンは隠す
     const b=$('#setupBanner'); b.textContent=''; b.classList.add('hidden');
     toast('AI読み取りキーを登録しました'); msg.textContent='登録しました。';
     setTimeout(()=>{ const ov=document.querySelector('.overlay'); if(ov) ov.remove(); }, 900);
@@ -398,7 +399,8 @@ function applyPermissions(){
   const isAdmin = userRole==='admin';
   document.querySelector('.tab[data-tab="capture"]').style.display = isAdmin ? '' : 'none';
   $('#permBtn').classList.toggle('hidden', !isAdmin);
-  $('#keyBtn').classList.toggle('hidden', !isAdmin);
+  // キー登録ボタンは「admin かつ キー未設定」のときだけ表示（設定済みなら隠す）
+  $('#keyBtn').classList.toggle('hidden', !(isAdmin && !geminiKey));
   if(!isAdmin){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
@@ -449,7 +451,13 @@ $('#readBtn').onclick=async ()=>{
       openForm(data,frontUrl,null,backUrl);
     }catch(err){
       console.error(err);
-      toast('AI読み取りに失敗。手入力してください');
+      // キー無効/期限切れ(400/403)ならadminにキー再登録ボタンを再表示
+      if(/Gemini 40[03]/.test(err.message||'') && userRole==='admin'){
+        $('#keyBtn').classList.remove('hidden');
+        toast('AI読み取りキーが無効/期限切れの可能性があります。右上「AI読み取りキー」から再登録してください');
+      }else{
+        toast('AI読み取りに失敗。手入力してください');
+      }
       openForm({},frontUrl,null,backUrl);
     }
   }else{
