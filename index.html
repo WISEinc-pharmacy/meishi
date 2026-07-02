@@ -241,6 +241,8 @@ let geminiKey=null, cards=[], pendingFront=null, pendingBack=null, editingId=nul
 
 const $ = s=>document.querySelector(s);
 const esc = s=> (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// 登録・編集・削除ができる権限（admin または editor）。権限管理・AIキー登録は admin のみ。
+const canEdit = ()=> userRole==='admin' || userRole==='editor';
 
 function toast(msg){
   const t=document.createElement('div');t.className='toast';t.textContent=msg;
@@ -288,7 +290,32 @@ function openHelp(){
     <div class="row" style="align-items:center;margin-bottom:6px"><h2 style="margin:0;flex:1">使い方</h2>
       <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
 
-    <h3 style="margin:14px 0 6px;font-size:15px">📷 名刺を登録する<span class="muted" style="font-weight:400;font-size:12px">（管理者のみ）</span></h3>
+    <h3 style="margin:14px 0 6px;font-size:15px">🔑 権限について</h3>
+    <p class="muted" style="margin:0 0 8px">権限は <b>admin / editor / viewer</b> の3種類です。できること・できないことは下の表のとおりです。</p>
+    <div style="overflow-x:auto;margin:0 0 6px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#eef2f7">
+            <th style="text-align:left;padding:8px 10px;border:1px solid var(--line);font-weight:700">できること</th>
+            <th style="padding:8px 6px;border:1px solid var(--line);font-weight:700;width:64px">admin</th>
+            <th style="padding:8px 6px;border:1px solid var(--line);font-weight:700;width:64px">editor</th>
+            <th style="padding:8px 6px;border:1px solid var(--line);font-weight:700;width:64px">viewer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">閲覧・検索</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">CSV出力</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">名刺の登録</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">名刺の編集</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">名刺の削除</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">権限管理（ユーザー追加・権限変更）</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td></tr>
+          <tr><td style="padding:7px 10px;border:1px solid var(--line)">AI読み取りキー登録</td><td style="text-align:center;border:1px solid var(--line)">○</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td><td style="text-align:center;border:1px solid var(--line);color:var(--danger)">×</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin:0 0 4px">※ 権限は右上の氏名の横に表示されます。変更は admin が「権限管理」から行えます。</p>
+
+    <h3 style="margin:16px 0 6px;font-size:15px">📷 名刺を登録する<span class="muted" style="font-weight:400;font-size:12px">（admin・editor）</span></h3>
     <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
       <li>上部の「<b>＋ 登録</b>」タブを開く</li>
       <li>「<b>表面</b>」をタップして名刺を撮影（スマホはカメラが起動します）</li>
@@ -308,9 +335,9 @@ function openHelp(){
 
     <h3 style="margin:16px 0 6px;font-size:15px">💡 ヒント</h3>
     <ul style="margin:0 0 4px 18px;padding:0;line-height:1.9">
-      <li>営業フォロー：詳細の「編集」でステータス（商談中など）・次アクション日・メモを記録できます（管理者）</li>
+      <li>営業フォロー：詳細の「編集」でステータス（商談中など）・次アクション日・メモを記録できます（admin・editor）</li>
       <li>うまく読み取れない時：明るい場所で、名刺を平らに、枠いっぱいに写すと精度が上がります</li>
-      <li>編集・登録・削除ができるのは<b>管理者</b>のみ／閲覧は<b>全員</b>できます</li>
+      <li>登録・編集・削除ができるのは<b>admin・editor</b>／閲覧は<b>全員</b>できます</li>
     </ul>
   </div>`;
   $('#detailMount').appendChild(m);
@@ -357,10 +384,10 @@ function openPermModal(){
   m.innerHTML=`<div class="modal pad">
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">権限管理</h2>
       <button class="btn sec sm" onclick="this.closest('.overlay').remove()">閉じる</button></div>
-    <p class="muted" style="margin:6px 0 12px"><b>admin</b>=登録・編集・削除・権限変更／<b>viewer</b>=閲覧のみ。<br>メールアドレスで事前に追加・権限付与できます（その人がGoogleログインすると反映）。</p>
+    <p class="muted" style="margin:6px 0 12px"><b>admin</b>=登録・編集・削除＋権限管理・AIキー登録／<b>editor</b>=登録・編集・削除／<b>viewer</b>=閲覧のみ。<br>メールアドレスで事前に追加・権限付与できます（その人がGoogleログインすると反映）。</p>
     <div class="row" style="gap:8px;margin-bottom:14px">
       <input id="addUserEmail" type="email" placeholder="メールアドレス" style="flex:1;min-width:0">
-      <select id="addUserRole" style="width:104px;flex:none"><option value="viewer">viewer</option><option value="admin">admin</option></select>
+      <select id="addUserRole" style="width:104px;flex:none"><option value="viewer">viewer</option><option value="editor">editor</option><option value="admin">admin</option></select>
       <button class="btn sm" id="addUserBtn" style="flex:none">追加</button>
     </div>
     <div id="permList" class="muted">読み込み中…</div></div>`;
@@ -392,7 +419,8 @@ async function renderUserList(){
       return `<div class="kv" style="align-items:center;gap:8px">
         <div class="v" style="font-size:14px;word-break:break-all">${esc(email)}${me?' ・自分':''}</div>
         <select class="role-sel" data-email="${esc(email)}" ${me?'disabled':''} style="width:96px;flex:none">
-          <option value="viewer" ${u.role!=='admin'?'selected':''}>viewer</option>
+          <option value="viewer" ${(u.role!=='admin'&&u.role!=='editor')?'selected':''}>viewer</option>
+          <option value="editor" ${u.role==='editor'?'selected':''}>editor</option>
           <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         </select>
         ${me?'<span style="width:46px;flex:none"></span>':`<button class="btn sm rm-btn" data-email="${esc(email)}" style="flex:none;background:var(--color-danger)">削除</button>`}
@@ -431,17 +459,18 @@ async function onAuth(u){
   try{ await loadCards(); }catch(e){ toast('一覧取得に失敗: '+(e.code||e.message)); }
 }
 
-// ===== 権限適用（編集できるのは director(admin) のみ・他は閲覧専用）=====
+// ===== 権限適用（登録・編集・削除= admin/editor・viewerは閲覧専用／権限管理・AIキー= adminのみ）=====
 function applyPermissions(){
   const isAdmin = userRole==='admin';
-  document.querySelector('.tab[data-tab="capture"]').style.display = isAdmin ? '' : 'none';
+  const editable = canEdit();
+  document.querySelector('.tab[data-tab="capture"]').style.display = editable ? '' : 'none';
   $('#permBtn').classList.toggle('hidden', !isAdmin);
   // キー登録ボタンは「admin かつ キー未設定」のときだけ表示（設定済みなら隠す）
   $('#keyBtn').classList.toggle('hidden', !(isAdmin && !geminiKey));
-  if(!isAdmin){
+  if(!editable){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
-    b.textContent='閲覧専用です。名刺の登録・編集ができるのは director のみです。';
+    b.textContent='閲覧専用です。名刺の登録・編集・削除ができるのは admin / editor のみです。';
     b.classList.remove('hidden');
   }
 }
@@ -459,7 +488,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 // ===== 画像選択（表/裏） → リサイズ → AI読み取り =====
 async function pickSide(e,which){
   const file=e.target.files[0]; if(!file) return;
-  if(userRole!=='admin'){ toast('編集できるのは director のみです'); return; }
+  if(!canEdit()){ toast('登録・編集ができるのは admin / editor のみです'); return; }
   const blob=await resizeImage(file,1280);
   const url=URL.createObjectURL(blob);
   if(which==='front'){ pendingFront=blob; setSlot('#frontPrev','#frontHint',url); }
@@ -584,7 +613,7 @@ function setFormBack(url){
 }
 $('#formBackInput').onchange=async e=>{
   const file=e.target.files[0]; if(!file) return;
-  if(userRole!=='admin'){ toast('編集できるのは director のみです'); return; }
+  if(!canEdit()){ toast('登録・編集ができるのは admin / editor のみです'); return; }
   pendingBack=await resizeImage(file,1280);
   setFormBack(URL.createObjectURL(pendingBack));
   e.target.value='';
@@ -610,7 +639,7 @@ $('#cancelForm').onclick=()=>{ editingId=null; resetStart(); show('start'); };
 
 $('#cardForm').onsubmit=async e=>{
   e.preventDefault();
-  if(userRole!=='admin'){ toast('権限がありません'); return; }
+  if(!canEdit()){ toast('登録・編集ができるのは admin / editor のみです'); return; }
   const f=e.target, btn=$('#saveBtn');
   btn.disabled=true; btn.textContent='保存中…';
   try{
@@ -684,7 +713,7 @@ function renderList(){
 // ===== 詳細 =====
 window.openDetail=function(id){
   const c=cards.find(x=>x.id===id); if(!c) return;
-  const canEdit=userRole==='admin';
+  const editable=canEdit();
   const kv=(k,v,link)=>v?`<div class="kv"><div class="k">${k}</div><div class="v">${link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(v)}</a>`:esc(v)}</div></div>`:'';
   const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
   m.innerHTML=`<div class="modal pad">
@@ -702,8 +731,8 @@ window.openDetail=function(id){
     ${kv('登録者',c.createdByName)}
     <div class="row" style="justify-content:flex-end;margin-top:16px">
       <button class="btn sec" onclick="this.closest('.overlay').remove()">閉じる</button>
-      ${canEdit?`<button class="btn" onclick="editCard('${c.id}')">編集</button>`:''}
-      ${userRole==='admin'?`<button class="btn danger" onclick="delCard('${c.id}')">削除</button>`:''}
+      ${editable?`<button class="btn" onclick="editCard('${c.id}')">編集</button>`:''}
+      ${editable?`<button class="btn danger" onclick="delCard('${c.id}')">削除</button>`:''}
     </div></div>`;
   $('#detailMount').appendChild(m);
   // 原本画像（表/裏）は別コレクションから遅延ロードしてサムネと差し替え

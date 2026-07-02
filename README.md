@@ -27,9 +27,17 @@ https://wiseinc-pharmacy.github.io/meishi/
 - CSV出力
 
 ## 権限（budget-tool準拠・メールキー方式）
-- 全営業で共有（Firebase Authログイン必須）。**閲覧は全ログインユーザー / 登録・編集・削除・権限変更は admin のみ**
-- `users` コレクションは **メールアドレスがキー**（`users/{email}`）。adminはヘッダーの「権限管理」ボタンから、**メールで事前にユーザー追加・権限付与（admin/viewer）・削除**ができる（その人がログインすると反映）
-- 未登録者は初回ログインで自動 `viewer`（閲覧専用）。UI上も非adminには登録タブ・権限管理ボタンを出さず、Firestoreルールでも write を admin 限定（二重防御）。自分自身の権限変更・削除は不可（ロックアウト防止）
+- 全営業で共有（Firebase Authログイン必須）。権限は **admin / editor / viewer** の3種類。
+
+| できること | admin | editor | viewer |
+|---|:---:|:---:|:---:|
+| 閲覧・検索・CSV出力 | ○ | ○ | ○ |
+| 名刺の登録・編集・削除 | ○ | ○ | × |
+| 権限管理（ユーザー追加・権限変更） | ○ | × | × |
+| AI読み取りキー登録 | ○ | × | × |
+
+- `users` コレクションは **メールアドレスがキー**（`users/{email}`）。adminはヘッダーの「権限管理」ボタンから、**メールで事前にユーザー追加・権限付与（admin/editor/viewer）・削除**ができる（その人がログインすると反映）
+- 未登録者は初回ログインで自動 `viewer`（閲覧専用）。UI上も viewer には登録タブを出さず、editor には権限管理・AIキーボタンを出さない。Firestoreルールでも write を admin/editor 限定（二重防御）。自分自身の権限変更・削除は不可（ロックアウト防止）
 - **最初の admin（director）はコンソールで1回だけ設定**：Firestore `users/{director@wise-jmco.com}` を作成し `role=admin`（自己昇格防止のためルール上adminしかusersを書けない）
 
 ## 個人情報の扱い（第三者PII）
@@ -52,3 +60,4 @@ https://wiseinc-pharmacy.github.io/meishi/
 
 ## 更新履歴
 - 2026-06-18 初版作成。画像はFirestore直接保存方式（Storage不使用）に決定
+- 2026-07-02 権限を3種化（admin / **editor** / viewer）。editor=登録・編集・削除まで可／権限管理・AIキー登録は admin のみ。使い方モーダルに権限表を追加。`firestore.rules` に `canEdit()`（admin/editor）を追加 → **コンソールのRulesタブに貼り付けて公開が必要**

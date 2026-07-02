@@ -2,32 +2,40 @@ rules_version = '2';
 
 // wise-meishi プロジェクト用 Firestoreルール
 // usersはメールアドレスをキーに管理（budget-tool準拠）。adminがメールで事前にユーザー追加・権限付与・削除できる。
-// 閲覧=全ログインユーザー / 登録・編集・削除・権限変更= admin のみ
+// 権限は3種: admin / editor / viewer
+//   閲覧・検索・CSV = 全ログインユーザー（viewer含む）
+//   登録・編集・削除 = admin または editor
+//   権限変更・AI読み取りキー登録 = admin のみ
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
     function em() { return request.auth.token.email; }
+    function roleOf() {
+      return exists(/databases/$(database)/documents/users/$(em()))
+        ? get(/databases/$(database)/documents/users/$(em())).data.role
+        : 'viewer';
+    }
     // director@wise-jmco.com は常にadmin（オーナー固定・コンソール設定不要）。他はusersドキュメントのroleで判定。
     function isAdmin() {
-      return isSignedIn() && (
-        em() == 'director@wise-jmco.com'
-        || (exists(/databases/$(database)/documents/users/$(em()))
-            && get(/databases/$(database)/documents/users/$(em())).data.role == 'admin')
-      );
+      return isSignedIn() && (em() == 'director@wise-jmco.com' || roleOf() == 'admin');
+    }
+    // 登録・編集・削除ができる権限（admin または editor）
+    function canEdit() {
+      return isSignedIn() && (em() == 'director@wise-jmco.com' || roleOf() == 'admin' || roleOf() == 'editor');
     }
 
     // 名刺データ（サムネ込み・一覧で読む）
     match /cards/{cardId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if canEdit();
     }
 
     // 名刺原本画像（詳細表示時のみ読む・一覧クエリから分離）
     match /cardImages/{cardId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if canEdit();
     }
 
     // ユーザー（メールアドレスがドキュメントID）
