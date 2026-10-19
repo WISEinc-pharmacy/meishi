@@ -7,3 +7,4 @@ firebase-service-account.json
 *.log
 *.csv
 .DS_Store
+*.bak-*

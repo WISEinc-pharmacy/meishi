@@ -68,12 +68,16 @@
   .preview{max-width:100%;border-radius:12px;border:1px solid var(--line);display:block;margin:0 auto}
   .muted{color:var(--sub);font-size:13px}
   .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#eef2f7;color:var(--navy)}
-  .st-初回接触{background:#eaf2ff;color:#2a5fb0}
-  .st-商談中{background:#fff3da;color:#9a6a00}
-  .st-見積提出{background:#e9f6ff;color:#1f7fa6}
-  .st-受注{background:#e3f7ee;color:#1f8f5f}
-  .st-失注{background:#fbe9e7;color:#b23b30}
-  .st-保留{background:#eef0f3;color:#5b6675}
+  /* ステージ7値（①あいさつ/②決裁者面談/③統括商談/成約/取引開始/検討中/見送り）。
+     クラス名は activity_payload.js の stageClass() が返すASCIIスラッグ */
+  .st-s1{background:#eaf2ff;color:#2a5fb0}
+  .st-s2{background:#fff3da;color:#9a6a00}
+  .st-s3{background:#e9f6ff;color:#1f7fa6}
+  .st-win{background:#e3f7ee;color:#1f8f5f}
+  .st-act{background:#dff3e4;color:#17704a}
+  .st-hold{background:#eef0f3;color:#5b6675}
+  .st-lost{background:#fbe9e7;color:#b23b30}
+  .st-none{background:#f1f5f9;color:#64748b}
   .list{display:grid;gap:10px}
   .item{display:flex;gap:12px;align-items:center;padding:12px;cursor:pointer}
   .item .thumb{width:52px;height:34px;border-radius:6px;object-fit:cover;background:#eef2f7;flex:none}
@@ -96,6 +100,27 @@
   .kv .k{width:96px;color:var(--sub);flex:none}
   .kv .v{flex:1;word-break:break-word}
   a{color:var(--navy)}
+  /* 活動タブ（スマホ前提：縦並び・タップ領域は44px以上） */
+  .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .filters .wide{grid-column:1 / -1}
+  .filters select,.filters input{padding:12px}
+  .fitem{display:flex;gap:10px;align-items:center;padding:14px 12px;cursor:pointer}
+  .fitem .nm{font-weight:700;font-size:15px}
+  .fitem .sub{font-size:12px;color:var(--sub)}
+  .act{border-bottom:1px solid var(--line);padding:10px 0;font-size:13px}
+  .act:last-child{border-bottom:0}
+  .act .hd{font-weight:700;font-size:13px}
+  .act .bd{color:var(--sub);margin-top:3px;white-space:pre-wrap;word-break:break-word}
+  .chk{display:flex;align-items:center;gap:10px;padding:11px 10px;border:1px solid var(--line);
+    border-radius:10px;margin-bottom:8px;font-size:14px;cursor:pointer;background:#fff}
+  .chk input{width:20px;height:20px;flex:none}
+  .kindrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .kindrow label{display:block;text-align:center;padding:12px 4px;border:1px solid var(--line);
+    border-radius:10px;font-size:14px;font-weight:600;color:var(--sub);background:#fff;cursor:pointer}
+  .kindrow input{display:none}
+  /* :has 非対応の古いブラウザでも選択が分かるように下線＋太字でフォールバック */
+  .kindrow input:checked + span{font-weight:800;text-decoration:underline}
+  .kindrow label:has(input:checked){background:var(--navy);border-color:var(--navy);color:#fff}
 </style>
 </head>
 <body>
@@ -126,6 +151,7 @@
   <div class="tabbar">
     <div class="tab on" data-tab="capture">＋ 登録</div>
     <div class="tab" data-tab="list">一覧・検索</div>
+    <div class="tab" data-tab="activity">活動</div>
   </div>
 
   <!-- 登録タブ -->
@@ -186,11 +212,21 @@
         <div class="fg"><label class="f">住所</label><input name="address"></div>
         <div class="fg"><label class="f">URL</label><input name="url"></div>
         <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+        <!-- 施設の紐付け（任意）。未選択でも保存できる＝必須項目は 氏名・会社名 のまま
+             値は facilities のドキュメントID＝施設名を正規化したもの（facilityKey）。
+             施設IDは一意でない（同一電話の別棟で衝突・未取得9件は空）ため紐付けキーに使わない（追補2） -->
+        <div class="fg"><label class="f">施設（任意・選ぶと活動記録と紐づきます）</label>
+          <select name="facilityKey" id="cardFacility"><option value="">（未設定）</option></select></div>
         <div class="grid2">
-          <div class="fg"><label class="f">ステータス</label>
+          <!-- ステータス＝ステージ7値（2026-10-19 語彙統一）。
+               旧値→新値の対応表は activity_payload.js の LEGACY_STATUS_MAP が正本：
+                 初回接触→①あいさつ ／ 商談中→②決裁者面談 ／ 見積提出→③統括商談
+                 受注→成約 ／ 失注→見送り ／ 保留→検討中
+               既存データは書き換えていない。表示・編集時に normalizeStage() が読み替える。 -->
+          <div class="fg"><label class="f">ステージ</label>
             <select name="status">
-              <option>初回接触</option><option>商談中</option><option>見積提出</option>
-              <option>受注</option><option>失注</option><option>保留</option>
+              <option>①あいさつ</option><option>②決裁者面談</option><option>③統括商談</option>
+              <option>成約</option><option>取引開始</option><option>検討中</option><option>見送り</option>
             </select></div>
           <div class="fg"><label class="f">次アクション日</label><input name="nextActionDate" type="date"></div>
         </div>
@@ -212,6 +248,26 @@
     <div id="listCount" class="muted" style="margin-bottom:8px"></div>
     <div id="listArea" class="list"></div>
   </section>
+
+  <!-- 活動タブ（施設単位の営業活動記録・設計正本 wise/AI_sales_ren/DESIGN.md） -->
+  <section id="tab-activity" class="hidden">
+    <!-- 最近の記録。連〈れん〉の自動同期が動くまで、入力の確認と管理部の転記はここから行う -->
+    <div class="card pad" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+        <h3 style="font-size:14px;margin:0">最近の記録</h3>
+        <button class="btn sec sm" id="actCsvBtn" style="flex:none">商談ログ用CSV</button>
+      </div>
+      <div id="recentBox" class="muted" style="margin-top:10px">読み込み中…</div>
+    </div>
+    <div class="filters">
+      <input id="facQ" class="wide" placeholder="施設名・電話で検索">
+      <select id="facArea"><option value="">エリア：すべて</option></select>
+      <select id="facType"><option value="">種別：すべて</option></select>
+      <select id="facStage" class="wide"><option value="">ステージ：すべて</option></select>
+    </div>
+    <div id="facCount" class="muted" style="margin-bottom:8px"></div>
+    <div id="facArea2" class="list"></div>
+  </section>
 </div>
 
 <div id="detailMount"></div>
@@ -221,6 +277,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- 活動記録の語彙とペイロード組み立ての正本（Nodeのハーネス test_activity_payload.mjs と同じファイルを読む）。
+     module は defer 相当で後から実行されるが、利用するのはユーザー操作後のハンドラ内なので間に合う。 -->
+<script type="module">
+  import * as ActivityPayload from './activity_payload.js';
+  window.MeishiActivity = ActivityPayload;
+  window.dispatchEvent(new Event('meishi-activity-ready'));
+</script>
+
 <script>
 // ===== Firebase 設定（wise-meishi 専用プロジェクト）=====
 // ↓ プロジェクト作成後に値を差し替える。未設定なら画面にセットアップ案内を表示。
@@ -333,9 +398,20 @@ function openHelp(){
       <li>「<b>CSV出力</b>」で一覧をダウンロードできます</li>
     </ol>
 
+    <h3 style="margin:16px 0 6px;font-size:15px">🏥 訪問したことを記録する<span class="muted" style="font-weight:400;font-size:12px">（ログインしていれば全員）</span></h3>
+    <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
+      <li>「<b>活動</b>」タブを開く（施設の一覧が出ます。施設名・電話・エリア・種別・ステージで絞り込めます）</li>
+      <li>訪問した<b>施設</b>をタップする（その施設の名刺と、これまでの活動履歴が見られます）</li>
+      <li>「<b>活動を記録</b>」を押して、日付・種別（訪問／電話／同行／メール／資料送付／その他）を選ぶ</li>
+      <li><b>会った人</b>は名刺から選ぶ（名刺に無い人は「＋ 名刺に無い人を追加」で手入力）。<b>会えなかった日も0人のまま保存できます</b></li>
+      <li>ステージ・次アクション・メモを入れて「<b>保存する</b>」　← 営業管理スプレッドシートへは自動で反映されます</li>
+    </ol>
+    <p class="muted" style="margin:0 0 4px">※ 入力する人はスプレッドシートを開く必要はありません。施設の一覧が空のときは、施設台帳からの同期がまだ済んでいません。</p>
+
     <h3 style="margin:16px 0 6px;font-size:15px">💡 ヒント</h3>
     <ul style="margin:0 0 4px 18px;padding:0;line-height:1.9">
-      <li>営業フォロー：詳細の「編集」でステータス（商談中など）・次アクション日・メモを記録できます（admin・editor）</li>
+      <li>営業フォロー：詳細の「編集」でステージ（②決裁者面談など）・次アクション日・メモを記録できます（admin・editor）</li>
+      <li>名刺の「施設」を選んでおくと、その人が「活動」タブの施設詳細に出てきます</li>
       <li>うまく読み取れない時：明るい場所で、名刺を平らに、枠いっぱいに写すと精度が上がります</li>
       <li>登録・編集・削除ができるのは<b>admin・editor</b>／閲覧は<b>全員</b>できます</li>
     </ul>
@@ -457,6 +533,8 @@ async function onAuth(u){
   if(!geminiKey && userRole==='admin'){ const b=$('#setupBanner'); if(!b.textContent){ b.textContent='AI読み取りキーが未設定です。右上の「AI読み取りキー」ボタンから登録してください。'; b.classList.remove('hidden'); } }
   applyPermissions();
   try{ await loadCards(); }catch(e){ toast('一覧取得に失敗: '+(e.code||e.message)); }
+  // 施設リスト（連〈れん〉が同期するミラー）。未同期・取得失敗でも名刺機能は止めない
+  try{ await loadFacilities(); }catch(e){}
 }
 
 // ===== 権限適用（登録・編集・削除= admin/editor・viewerは閲覧専用／権限管理・AIキー= adminのみ）=====
@@ -470,7 +548,7 @@ function applyPermissions(){
   if(!editable){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
-    b.textContent='閲覧専用です。名刺の登録・編集・削除ができるのは admin / editor のみです。';
+    b.textContent='名刺の登録・編集・削除ができるのは admin / editor のみです。「活動」タブの営業活動記録はログインしていれば誰でも入力できます。';
     b.classList.remove('hidden');
   }
 }
@@ -482,7 +560,9 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   const k=t.dataset.tab;
   $('#tab-capture').classList.toggle('hidden',k!=='capture');
   $('#tab-list').classList.toggle('hidden',k!=='list');
+  $('#tab-activity').classList.toggle('hidden',k!=='activity');
   if(k==='list') renderList();
+  if(k==='activity') openActivityTab();
 });
 
 // ===== 画像選択（表/裏） → リサイズ → AI読み取り =====
@@ -596,7 +676,10 @@ function openForm(data,imgUrl,id,backUrl){
   f.name.value=data.name||''; f.kana.value=data.kana||''; f.company.value=data.company||'';
   f.department.value=data.department||''; f.title.value=data.title||''; f.email.value=data.email||'';
   f.phone.value=data.phone||''; f.mobile.value=data.mobile||''; f.address.value=data.address||'';
-  f.url.value=data.url||''; f.status.value=data.status||'初回接触';
+  f.url.value=data.url||'';
+  // 旧ステータス（初回接触等）のカードはステージ7値へ読み替えてから選択状態にする
+  f.status.value=stageLabel(data.status||'');
+  if(f.facilityKey){ fillCardFacilitySelect(); f.facilityKey.value=data.facilityKey||''; }
   f.nextActionDate.value=data.nextActionDate||''; f.memo.value=data.memo||'';
   $('#formPreview').src=imgUrl||data.thumb||'';
   $('#formPreview').style.display=(imgUrl||data.thumb)?'block':'none';
@@ -650,6 +733,12 @@ $('#cardForm').onsubmit=async e=>{
       url:f.url.value.trim(), status:f.status.value, nextActionDate:f.nextActionDate.value, memo:f.memo.value.trim(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
+    // 施設の紐付け（任意）。未選択なら空文字で保存＝必須項目は増やさない
+    const fkey=f.facilityKey? f.facilityKey.value : '';
+    const fac=fkey? (facilities.find(x=>facKey(x)===fkey)||{}) : {};
+    rec.facilityKey=fkey;
+    rec.facilityName=fkey? (fac.name||fkey) : '';
+    rec.facilityId=fkey? (fac.facilityId||'') : '';   // 表示用の属性（一意ではない）
     // 表面：新規撮影時のみサムネ・原本を作る（編集で撮り直さなければ既存を保持）
     let frontFull=null, backFull=null;
     if(pendingFront){
@@ -706,7 +795,7 @@ function renderList(){
         <div class="co">${esc(c.company||'')}${c.department?' / '+esc(c.department):''}</div>
       </div>
       <div class="sp"></div>
-      <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span>
+      <span class="pill ${stageCls(c.status)}">${esc(stageLabel(c.status))}</span>
     </div>`).join('');
 }
 
@@ -718,7 +807,7 @@ window.openDetail=function(id){
   const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
   m.innerHTML=`<div class="modal pad">
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1">${esc(c.name||'')}</h2>
-      <span class="pill st-${esc(c.status||'初回接触')}">${esc(c.status||'初回接触')}</span></div>
+      <span class="pill ${stageCls(c.status)}">${esc(stageLabel(c.status))}</span></div>
     <p class="muted" style="margin:4px 0 12px">${esc(c.company||'')}${c.title?' / '+esc(c.title):''}</p>
     ${(c.thumb||c.hasImage)?`<img class="detail-img" id="detailImg" src="${esc(c.thumb||'')}" alt="表面">`:''}
     ${c.hasBack?`<img class="detail-img" id="detailImgBack" src="" alt="裏面">`:''}
@@ -766,6 +855,292 @@ window.delCard=async function(id){
     document.querySelectorAll('.overlay').forEach(o=>o.remove());
     await loadCards(); toast('削除しました');
   }catch(e){ toast('削除失敗: '+e.message); }
+};
+
+// =============================================================================
+// ===== 活動タブ：施設単位の営業活動記録（設計正本 wise/AI_sales_ren/DESIGN.md）=====
+//   施設が主キー・人（名刺）は属性。名刺が1枚も無い施設でも記録できる。
+//   facilities は連〈れん〉がAdmin SDKで片方向に書くミラー（アプリは読むだけ）。
+// =============================================================================
+let facilities=[], facLoaded=false;
+
+// activity_payload.js（module）の関数へのアクセサ。module は後から読み込まれるため都度参照する。
+const MA = ()=> window.MeishiActivity || null;
+function stageLabel(v){ const m=MA(); if(m) return m.normalizeStage(v);
+  const s=(v==null?'':String(v)).trim(); return STAGE_FALLBACK.includes(s)? s : STAGE_FALLBACK[0]; }
+function stageCls(v){ const m=MA(); return m? m.stageClass(v) : 'st-s1'; }
+const STAGE_FALLBACK=['①あいさつ','②決裁者面談','③統括商談','成約','取引開始','検討中','見送り'];
+const KIND_FALLBACK=['訪問','電話','同行','メール','資料送付','その他'];
+const stageList = ()=> (MA()? MA().STAGES : STAGE_FALLBACK);
+// 施設キー＝施設名を正規化したもの（facilities のドキュメントID）。正規化は activity_payload.js が正本
+const facKey = f => { const m=MA(); const n=(f&&(f.name||f.id))||''; return m? m.facilityKeyOf(n) : String(n).trim().replace(/\//g,'／'); };
+// 施設台帳のステージは空が30件ある（2026-10-19実測）。名刺と違い空は空のまま「未設定」と出す
+const facStageLabel = v => (String(v||'').trim()? stageLabel(v) : '未設定');
+const facStageCls   = v => (String(v||'').trim()? stageCls(v) : 'st-none');
+const kindList  = ()=> (MA()? MA().ACTIVITY_KINDS : KIND_FALLBACK);
+
+async function openActivityTab(){
+  if(!facLoaded){ await loadFacilities(); }
+  renderFacilities();
+  renderRecent();
+}
+
+async function loadFacilities(){
+  try{
+    const qs=await db.collection('facilities').get();
+    facilities=qs.docs.map(d=>({id:d.id,...d.data()}));
+    facilities.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ja'));
+    facLoaded=true;
+    fillFacilityFilters();
+    fillCardFacilitySelect();
+  }catch(e){
+    facilities=[]; facLoaded=false;
+    $('#facArea2').innerHTML='<div class="muted" style="padding:24px;text-align:center">施設リストの取得に失敗しました（'+esc(e.code||e.message)+'）</div>';
+  }
+}
+
+function fillFacilityFilters(){
+  const uniq=k=>[...new Set(facilities.map(f=>(f[k]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+  const set=(sel,label,vals)=>{
+    const el=$(sel), cur=el.value;
+    el.innerHTML='<option value="">'+label+'：すべて</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');
+    el.value=cur;
+  };
+  set('#facArea','エリア',uniq('area'));
+  set('#facType','種別',uniq('type'));
+  set('#facStage','ステージ',[...stageList(),'未設定']);
+}
+
+function fillCardFacilitySelect(){
+  const el=$('#cardFacility'); if(!el) return;
+  const cur=el.value;
+  el.innerHTML='<option value="">（未設定）</option>'+
+    facilities.map(f=>`<option value="${esc(facKey(f))}">${esc(f.name||f.id)}</option>`).join('');
+  el.value=cur;
+}
+
+['#facQ','#facArea','#facType','#facStage'].forEach(s=>{
+  const el=$(s); if(el) el.addEventListener('input',renderFacilities);
+});
+
+function renderFacilities(){
+  const area=$('#facArea2');
+  if(!facilities.length){
+    $('#facCount').textContent='';
+    area.innerHTML='<div class="muted" style="padding:24px;text-align:center">施設リストはまだ同期されていません</div>';
+    return;
+  }
+  const q=$('#facQ').value.trim().toLowerCase();
+  const fa=$('#facArea').value, ft=$('#facType').value, fs=$('#facStage').value;
+  const hit=facilities.filter(f=>{
+    if(q && ![f.name,f.tel].some(v=>(v||'').toLowerCase().includes(q))) return false;
+    if(fa && (f.area||'')!==fa) return false;
+    if(ft && (f.type||'')!==ft) return false;
+    if(fs && facStageLabel(f.stage)!==fs) return false;
+    return true;
+  });
+  $('#facCount').textContent=`全 ${facilities.length} 施設`+((q||fa||ft||fs)?`（${hit.length} 件ヒット）`:'');
+  if(!hit.length){ area.innerHTML='<div class="muted" style="padding:24px;text-align:center">該当する施設がありません</div>'; return; }
+  area.innerHTML=hit.map(f=>`
+    <div class="card fitem" onclick="openFacility('${esc(f.id)}')">
+      <div style="min-width:0">
+        <div class="nm">${esc(f.name||'(名称未設定)')}</div>
+        <div class="sub">${esc(f.area||'')}${f.type?' / '+esc(f.type):''}${f.tel?' / '+esc(f.tel):''}</div>
+      </div>
+      <div class="sp" style="flex:1"></div>
+      <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span>
+    </div>`).join('');
+}
+
+// その施設に紐づく名刺（cards は起動時に全件ロード済みなので手元で絞る＝追加クエリ不要）
+// 紐付けキーは facilityKey（＝施設名の正規化／facilities のドキュメントID）。施設IDは一意でないので使わない
+function cardsOfFacility(fkey){ return cards.filter(c=>(c.facilityKey||'')===fkey); }
+
+window.openFacility=async function(docId){
+  const f=facilities.find(x=>x.id===docId); if(!f) return;
+  const fkey=facKey(f);
+  const mine=cardsOfFacility(fkey);
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <div class="row" style="align-items:center"><h2 style="margin:0;flex:1;font-size:18px">${esc(f.name||'')}</h2>
+      <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span></div>
+    <p class="muted" style="margin:4px 0 12px">${esc(f.area||'')}${f.type?' / '+esc(f.type):''}${f.owner?' / 担当 '+esc(f.owner):''}</p>
+    ${f.tel?`<div class="kv"><div class="k">電話</div><div class="v"><a href="tel:${esc(f.tel)}">${esc(f.tel)}</a></div></div>`:''}
+    <button class="btn" style="width:100%;margin:14px 0" onclick="openActivityForm('${esc(docId)}')">活動を記録</button>
+    <h3 style="font-size:14px;margin:14px 0 6px">この施設の名刺（${mine.length}）</h3>
+    ${mine.length? mine.map(c=>`<div class="kv"><div class="k">${esc(c.title||'—')}</div><div class="v">${esc(c.name||'')}</div></div>`).join('')
+                 : '<p class="muted" style="margin:0">紐づく名刺はまだありません</p>'}
+    <h3 style="font-size:14px;margin:16px 0 6px">活動履歴（最大20件）</h3>
+    <div id="actHist" class="muted">読み込み中…</div>
+    <div class="row" style="justify-content:flex-end;margin-top:16px">
+      <button class="btn sec" onclick="this.closest('.overlay').remove()">閉じる</button>
+    </div></div>`;
+  $('#detailMount').appendChild(m);
+  renderActivityHistory(fkey, m.querySelector('#actHist'));
+};
+
+async function fetchActivities(fkey){
+  // 複合インデックス(facilityKey,date desc)が未作成でも動くように、失敗したら手元で並べ替える
+  try{
+    const qs=await db.collection('activities').where('facilityKey','==',fkey).orderBy('date','desc').limit(20).get();
+    return qs.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    const qs=await db.collection('activities').where('facilityKey','==',fkey).get();
+    return qs.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,20);
+  }
+}
+
+async function renderActivityHistory(fkey,box){
+  if(!box) return;
+  try{
+    const rows=await fetchActivities(fkey);
+    if(!rows.length){ box.innerHTML='<p class="muted" style="margin:0">活動記録はまだありません</p>'; return; }
+    box.classList.remove('muted');
+    box.innerHTML=rows.map(a=>{
+      const who=(a.attendees||[]).map(p=>p.name).filter(Boolean).join('・');
+      const sync=a.syncState&&a.syncState.status==='synced'?'同期済':(a.syncState&&a.syncState.status==='failed'?'同期失敗':'同期待ち');
+      return `<div class="act">
+        <div class="hd">${esc(a.date||'')}　${esc(a.kind||'')}　<span class="pill ${stageCls(a.stage)}">${esc(stageLabel(a.stage))}</span></div>
+        <div class="bd">${who?'相手：'+esc(who)+'\n':''}${a.memo?esc(a.memo)+'\n':''}${a.nextAction?'次：'+esc(a.nextAction)+(a.nextActionDate?'（'+esc(a.nextActionDate)+'）':''):''}</div>
+        <div class="bd" style="font-size:11px">${esc((a.createdBy&&a.createdBy.name)||'')} / ${esc(sync)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ box.textContent='活動履歴の取得に失敗しました（'+(e.code||e.message)+'）'; }
+}
+
+// ===== 活動記録フォーム（スマホ前提・1画面縦並び）=====
+let manualRows=0;
+window.openActivityForm=function(docId){
+  const f=facilities.find(x=>x.id===docId); if(!f) return;
+  const fkey=facKey(f);
+  const mine=cardsOfFacility(fkey);
+  const today=new Date(); const iso=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  manualRows=0;
+  const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal pad">
+    <h2 style="margin:0 0 2px;font-size:18px">活動を記録</h2>
+    <p class="muted" style="margin:0 0 14px">${esc(f.name||'')}</p>
+    <form id="actForm" data-fkey="${esc(fkey)}" data-fname="${esc(f.name||'')}" data-fid="${esc(f.facilityId||'')}">
+      <div class="fg"><label class="f">日付</label><input name="date" type="date" value="${iso}" required></div>
+      <div class="fg"><label class="f">種別</label>
+        <div class="kindrow">${kindList().map((k,i)=>
+          `<label><input type="radio" name="kind" value="${esc(k)}"${i===0?' checked':''}><span>${esc(k)}</span></label>`).join('')}</div></div>
+      <div class="fg"><label class="f">会った人（0人でも保存できます）</label>
+        ${mine.length? mine.map(c=>
+          `<label class="chk"><input type="checkbox" class="att" value="${esc(c.id)}" data-name="${esc(c.name||'')}" data-title="${esc(c.title||'')}">
+            <span>${esc(c.name||'(無名)')}${c.title?' <span class="muted">'+esc(c.title)+'</span>':''}</span></label>`).join('')
+          : '<p class="muted" style="margin:0 0 8px">この施設に紐づく名刺はまだありません</p>'}
+        <div id="manualBox"></div>
+        <button type="button" class="btn sec sm" id="addManual" style="width:100%">＋ 名刺に無い人を追加</button>
+      </div>
+      <div class="fg"><label class="f">ステージ</label>
+        <select name="stage">${stageList().map(s=>`<option${stageLabel(f.stage)===s?' selected':''}>${esc(s)}</option>`).join('')}</select></div>
+      <!-- 施設台帳のステージが空の施設（実測30件）は既定で ①あいさつ が選ばれる -->
+      <div class="fg"><label class="f">次アクション</label><input name="nextAction" placeholder="例：来週あらためて管理者へ説明"></div>
+      <div class="fg"><label class="f">次アクション期日</label><input name="nextActionDate" type="date"></div>
+      <div class="fg"><label class="f">メモ</label><textarea name="memo" placeholder="話した内容・相手の反応など"></textarea></div>
+      <div id="actErr" class="dupbox hidden"></div>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button type="button" class="btn sec" style="flex:1" onclick="this.closest('.overlay').remove()">キャンセル</button>
+        <button type="submit" class="btn" style="flex:2" id="actSave">保存する</button>
+      </div>
+    </form></div>`;
+  $('#detailMount').appendChild(m);
+  m.querySelector('#addManual').onclick=()=>{
+    manualRows++;
+    const d=document.createElement('div'); d.className='grid2'; d.style.marginBottom='8px';
+    d.innerHTML=`<input class="mname" placeholder="氏名"><input class="mtitle" placeholder="役職（任意）">`;
+    m.querySelector('#manualBox').appendChild(d);
+  };
+  m.querySelector('#actForm').onsubmit=e=>saveActivity(e,m);
+};
+
+async function saveActivity(e,overlay){
+  e.preventDefault();
+  const form=e.target, btn=overlay.querySelector('#actSave'), err=overlay.querySelector('#actErr');
+  err.classList.add('hidden');
+  const api=MA();
+  if(!api){ err.textContent='読み込みが完了していません。画面を再読み込みしてからもう一度お試しください。'; err.classList.remove('hidden'); return; }
+  const attendees=[
+    ...[...overlay.querySelectorAll('.att:checked')].map(c=>({cardId:c.value,name:c.dataset.name,title:c.dataset.title})),
+    ...[...overlay.querySelectorAll('#manualBox .grid2')].map(r=>({
+      name:r.querySelector('.mname').value, title:r.querySelector('.mtitle').value }))
+  ];
+  let payload;
+  try{
+    payload=api.buildActivityPayload({
+      facilityKey:form.dataset.fkey, facilityName:form.dataset.fname, facilityId:form.dataset.fid,
+      date:form.date.value, kind:(form.querySelector('input[name=kind]:checked')||{}).value,
+      attendees, stage:form.stage.value,
+      nextAction:form.nextAction.value, nextActionDate:form.nextActionDate.value, memo:form.memo.value,
+      user:{email:currentUser.email,name:currentUser.displayName||currentUser.email}
+    },{serverTimestamp:()=>firebase.firestore.FieldValue.serverTimestamp()});
+  }catch(ex){ err.textContent=ex.message; err.classList.remove('hidden'); return; }
+  btn.disabled=true; btn.textContent='保存中…';
+  try{
+    await db.collection('activities').add(payload);
+    overlay.remove();
+    document.querySelectorAll('.overlay').forEach(o=>o.remove());
+    toast('活動を記録しました');
+    renderRecent();
+  }catch(ex){
+    err.textContent='保存失敗: '+(ex.code||ex.message); err.classList.remove('hidden');
+  }finally{ btn.disabled=false; btn.textContent='保存する'; }
+}
+
+// ===== 最近の記録（施設をまたいだ一覧）=====
+// 連〈れん〉が動くまでは、営業は自分の入力が入ったかをここで確かめ、管理部はここから商談ログへ転記する。
+// 並べ替えは createdAt の単一フィールド（複合インデックス不要）。失敗したら手元で並べ替える。
+async function fetchRecent(limit){
+  try{
+    const qs=await db.collection('activities').orderBy('createdAt','desc').limit(limit).get();
+    return qs.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    const qs=await db.collection('activities').limit(500).get();
+    return qs.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,limit);
+  }
+}
+
+async function renderRecent(){
+  const box=$('#recentBox'); if(!box) return;
+  box.className='muted'; box.textContent='読み込み中…';
+  try{
+    const rows=await fetchRecent(20);
+    if(!rows.length){ box.textContent='まだ記録がありません'; return; }
+    box.className='';
+    box.innerHTML=rows.map(a=>{
+      const who=(a.attendees||[]).map(p=>p.name).filter(Boolean).join('・');
+      return `<div class="act">
+        <div class="hd">${esc(a.date||'')}　${esc(a.facilityName||'')}　${esc(a.kind||'')}</div>
+        <div class="bd">${who?'相手：'+esc(who)+'\n':''}${a.memo?esc(a.memo)+'\n':''}${a.nextAction?'次：'+esc(a.nextAction)+(a.nextActionDate?'（'+esc(a.nextActionDate)+'）':''):''}</div>
+        <div class="bd" style="font-size:11px">${esc((a.createdBy&&a.createdBy.name)||'')}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ box.className='muted'; box.textContent='最近の記録の取得に失敗しました（'+(e.code||e.message)+'）'; }
+}
+
+// 商談ログの列順（日付・施設名・種別・相手・内容・次アクション・担当）で出す。
+// B列=施設IDは施設名から引く数式なので出さない。日付をA列へ、施設名以降をC列へ貼る。
+$('#actCsvBtn').onclick=async()=>{
+  const btn=$('#actCsvBtn'); btn.disabled=true; btn.textContent='作成中…';
+  try{
+    const rows=await fetchRecent(500);
+    if(!rows.length){ toast('まだ記録がありません'); return; }
+    const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const line=a=>[a.date||'', a.facilityName||'', a.kind||'',
+      (a.attendees||[]).map(p=>[p.name,p.title].filter(Boolean).join('/')).filter(Boolean).join('・'),
+      a.memo||'',
+      (a.nextAction||'')+(a.nextActionDate?'（'+a.nextActionDate+'）':''),
+      (a.createdBy&&a.createdBy.name)||''].map(q).join(',');
+    const out=[['日付','施設名','種別','相手','内容','次アクション','担当'].map(q).join(',')]
+      .concat(rows.slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(line));
+    const blob=new Blob(['﻿'+out.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='shodan_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  }catch(e){ toast('CSVの作成に失敗しました（'+(e.code||e.message)+'）'); }
+  finally{ btn.disabled=false; btn.textContent='商談ログ用CSV'; }
 };
 
 // ===== CSV出力 =====

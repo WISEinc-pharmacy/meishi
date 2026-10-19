@@ -1,0 +1,6 @@
+{
+  "name": "wise-meishi",
+  "private": true,
+  "type": "module",
+  "description": "名刺管理（GitHub Pages配信の静的サイト）。type=module は activity_payload.js をブラウザとNodeハーネスの両方からESMとして読むため。依存パッケージは持たない。"
+}

@@ -52,5 +52,29 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // ===== 営業活動記録（連〈れん〉連携・設計正本 wise/AI_sales_ren/DESIGN.md）=====
+
+    // 施設台帳のミラー。連〈れん〉がAdmin SDKで片方向に書く（Admin SDKはrulesを迂回する）。
+    // アプリからは読むだけ＝クライアントからの改変を全面禁止。
+    match /facilities/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // 営業活動記録。サインインしていれば誰でも1件書ける（名刺の編集権 canEdit() とは独立）。
+    // ・create: 同期状態は必ず pending で作り、作成者は自分のメールに限定する
+    // ・update: 作成者本人のみ。syncState（連が書き戻す同期状態）は本人も変更できない
+    // ・delete: admin のみ
+    match /activities/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.syncState.status == 'pending'
+                    && request.resource.data.createdBy.email == em();
+      allow update: if isSignedIn()
+                    && resource.data.createdBy.email == em()
+                    && request.resource.data.syncState == resource.data.syncState;
+      allow delete: if isAdmin();
+    }
   }
 }
