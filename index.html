@@ -78,6 +78,10 @@
   .st-hold{background:#eef0f3;color:#5b6675}
   .st-lost{background:#fbe9e7;color:#b23b30}
   .st-none{background:#f1f5f9;color:#64748b}
+  /* 施設台帳E列「優先度」（高/S=赤, 中/A=黄, 低/B=無色）。配色は施設台帳の条件付き書式に合わせる */
+  .pri-high{background:#fbe0dc;color:#a0281c;font-weight:700}
+  .pri-mid{background:#fff3c4;color:#8a6a00;font-weight:700}
+  .pri-low{background:#f1f5f9;color:#64748b}
   .list{display:grid;gap:10px}
   .item{display:flex;gap:12px;align-items:center;padding:12px;cursor:pointer}
   .item .thumb{width:52px;height:34px;border-radius:6px;object-fit:cover;background:#eef2f7;flex:none}
@@ -151,7 +155,7 @@
   <div class="tabbar">
     <div class="tab on" data-tab="capture">＋ 登録</div>
     <div class="tab" data-tab="list">一覧・検索</div>
-    <div class="tab" data-tab="activity">活動</div>
+    <div class="tab" data-tab="activity">営業活動</div>
   </div>
 
   <!-- 登録タブ -->
@@ -274,6 +278,10 @@
       <select id="facArea"><option value="">エリア：すべて</option></select>
       <select id="facType"><option value="">種別：すべて</option></select>
       <select id="facStage" class="wide"><option value="">ステージ：すべて</option></select>
+      <select id="facSort" class="wide">
+        <option value="priority">並び順：優先度が高い順</option>
+        <option value="name">並び順：施設名</option>
+      </select>
     </div>
     <div id="facCount" class="muted" style="margin-bottom:8px"></div>
     <div id="facArea2" class="list"></div>
@@ -404,7 +412,7 @@ function openHelp(){
 
     <h3 style="margin:16px 0 6px;font-size:15px">🏥 訪問したことを記録する<span class="muted" style="font-weight:400;font-size:12px">（ログインしていれば全員）</span></h3>
     <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
-      <li>「<b>活動</b>」タブを開く（施設の一覧が出ます。施設名・電話・エリア・種別・ステージで絞り込めます）</li>
+      <li>「<b>営業活動</b>」タブを開く（施設の一覧が出ます。施設名・電話・エリア・種別・ステージで絞り込め、優先度で並び替えできます）</li>
       <li>訪問した<b>施設</b>をタップする（その施設の名刺と、これまでの活動履歴が見られます）</li>
       <li>「<b>活動を記録</b>」を押して、日付・種別（訪問／電話／同行／メール／資料送付／その他）を選ぶ</li>
       <li><b>会った人</b>は名刺から選ぶ（名刺に無い人は「＋ 名刺に無い人を追加」で手入力）。<b>会えなかった日も0人のまま保存できます</b></li>
@@ -415,7 +423,7 @@ function openHelp(){
     <h3 style="margin:16px 0 6px;font-size:15px">💡 ヒント</h3>
     <ul style="margin:0 0 4px 18px;padding:0;line-height:1.9">
       <li>営業フォロー：詳細の「編集」でステージ（②決裁者面談など）・次アクション日・メモを記録できます（admin・editor）</li>
-      <li>名刺の「施設」を選んでおくと、その人が「活動」タブの施設詳細に出てきます</li>
+      <li>名刺の「施設」を選んでおくと、その人が「営業活動」タブの施設詳細に出てきます</li>
       <li>うまく読み取れない時：明るい場所で、名刺を平らに、枠いっぱいに写すと精度が上がります</li>
       <li>登録・編集・削除ができるのは<b>admin・editor</b>／閲覧は<b>全員</b>できます</li>
     </ul>
@@ -552,7 +560,7 @@ function applyPermissions(){
   if(!editable){
     document.querySelector('.tab[data-tab="list"]').click();
     const b=$('#setupBanner');
-    b.textContent='名刺の登録・編集・削除ができるのは admin / editor のみです。「活動」タブの営業活動記録はログインしていれば誰でも入力できます。';
+    b.textContent='名刺の登録・編集・削除ができるのは admin / editor のみです。「営業活動」タブの記録はログインしていれば誰でも入力できます。';
     b.classList.remove('hidden');
   }
 }
@@ -744,21 +752,47 @@ function facilityDuplicateResult(name,phone){
   };
 }
 
+// 新規施設登録の重複チェック状態。入力が変わるたびにリセットし、再チェック・再確認を強制する
+let newFacilityDupTimer=null, newFacilityDupConfirmed=false, newFacilityDupHasMatch=false;
+const newFacilityHasInput = f => !!(f.newFacilityName.value.trim() || f.newFacilityPhone.value.trim());
+
+// 入力中のハンドラ：即チェックせず「チェックしています」を見せてから少し待って本チェックする
+function onNewFacilityInput(){
+  const f=$('#cardForm'), w=$('#facilityDupWarn'); if(!f||!w) return;
+  newFacilityDupConfirmed=false;
+  clearTimeout(newFacilityDupTimer);
+  if(!newFacilityHasInput(f)){ newFacilityDupHasMatch=false; w.classList.add('hidden'); return; }
+  w.innerHTML='重複がないかチェックしています…';
+  w.classList.remove('hidden');
+  newFacilityDupTimer=setTimeout(renderNewFacilityDuplicates,300);
+}
+
+// 本チェック：一致・類似があれば名前を示し「別の事業者として登録／キャンセル」の選択を必須にする
 function renderNewFacilityDuplicates(){
   const f=$('#cardForm'), w=$('#facilityDupWarn');
-  if(!f || f.facilityKey.value!=='__new__'){ if(w) w.classList.add('hidden'); return {phoneMatches:[],nameMatches:[]}; }
+  if(!f || f.facilityKey.value!=='__new__'){ if(w) w.classList.add('hidden'); newFacilityDupHasMatch=false; return {phoneMatches:[],nameMatches:[]}; }
+  if(!newFacilityHasInput(f)){ w.classList.add('hidden'); newFacilityDupHasMatch=false; return {phoneMatches:[],nameMatches:[]}; }
   const hits=facilityDuplicateResult(f.newFacilityName.value,f.newFacilityPhone.value);
-  const lines=[];
-  if(hits.phoneMatches.length){
-    lines.push('⚠️ 既に登録されている可能性がある施設があります：<br>'+hits.phoneMatches.slice(0,5).map(x=>'・'+esc(x.name||x.id)+'（'+esc(x.tel||x.phone||'')+'）').join('<br>'));
-  }
   const phoneSet=new Set(hits.phoneMatches);
   const similar=hits.nameMatches.filter(x=>!phoneSet.has(x));
-  if(similar.length) lines.push('似ている施設があります：<br>'+similar.slice(0,5).map(x=>'・'+esc(x.name||x.id)).join('<br>'));
-  if(lines.length){
-    w.innerHTML=lines.join('<br><br>')+'<br><small>確認のうえ、このまま新規施設として登録する場合も保存できます。</small>';
-    w.classList.remove('hidden');
-  }else w.classList.add('hidden');
+  const matched=[...hits.phoneMatches,...similar];
+  newFacilityDupHasMatch=matched.length>0;
+  if(!matched.length){ w.classList.add('hidden'); return hits; }
+  const names=matched.slice(0,5).map(x=>esc(x.name||x.id)).join('・');
+  w.innerHTML=`⚠️ <b>${names}</b>一致。既に登録されている可能性があります。<br>`+
+    `<div class="row" style="gap:8px;margin-top:8px">`+
+    `<button type="button" class="btn sec sm" id="facDupCancel">キャンセル</button>`+
+    `<button type="button" class="btn sm" id="facDupProceed">別の事業者として登録</button>`+
+    `</div>`;
+  w.classList.remove('hidden');
+  $('#facDupProceed').onclick=()=>{
+    newFacilityDupConfirmed=true;
+    w.innerHTML=`✅ 確認済み：別の事業者として登録します（${names}とは別）。`;
+  };
+  $('#facDupCancel').onclick=()=>{
+    f.newFacilityName.value=''; f.newFacilityPhone.value='';
+    f.facilityKey.value=''; toggleNewFacilityForm();
+  };
   return hits;
 }
 
@@ -767,11 +801,12 @@ function toggleNewFacilityForm(){
   const active=f.facilityKey.value==='__new__';
   box.classList.toggle('hidden',!active);
   ['newFacilityName','newFacilityPhone','newFacilityArea','newFacilityKubun'].forEach(n=>{ f[n].required=active; });
-  if(active) renderNewFacilityDuplicates(); else $('#facilityDupWarn').classList.add('hidden');
+  if(active) onNewFacilityInput();
+  else{ clearTimeout(newFacilityDupTimer); newFacilityDupConfirmed=false; newFacilityDupHasMatch=false; $('#facilityDupWarn').classList.add('hidden'); }
 }
 
 $('#cardFacility').addEventListener('change',toggleNewFacilityForm);
-['newFacilityName','newFacilityPhone'].forEach(n=>$('#cardForm')[n].addEventListener('input',renderNewFacilityDuplicates));
+['newFacilityName','newFacilityPhone'].forEach(n=>$('#cardForm')[n].addEventListener('input',onNewFacilityInput));
 toggleNewFacilityForm();
 
 $('#cancelForm').onclick=()=>{ editingId=null; resetStart(); show('start'); };
@@ -790,7 +825,9 @@ $('#cardForm').onsubmit=async e=>{
         area:f.newFacilityArea.value, kubun:f.newFacilityKubun.value.trim()
       };
       if(!newFacility.name||!newFacility.phone||!newFacility.area||!newFacility.kubun) throw new Error('新規施設の4項目をすべて入力してください');
+      clearTimeout(newFacilityDupTimer);
       renderNewFacilityDuplicates();
+      if(newFacilityDupHasMatch && !newFacilityDupConfirmed) throw new Error('重複の可能性がある施設があります。「別の事業者として登録」または「キャンセル」を選んでください');
     }
     const rec={
       name:f.name.value.trim(), kana:f.kana.value.trim(), company:f.company.value.trim(),
@@ -949,6 +986,10 @@ const facKey = f => { const m=MA(); const n=(f&&(f.name||f.id))||''; return m? m
 // 施設台帳のステージは空が30件ある（2026-10-19実測）。名刺と違い空は空のまま「未設定」と出す
 const facStageLabel = v => (String(v||'').trim()? stageLabel(v) : '未設定');
 const facStageCls   = v => (String(v||'').trim()? stageCls(v) : 'st-none');
+// 施設台帳E列「優先度」（高/中/低 または S/A/B）。数字が大きいほど優先度が高い＝並び替えの比較に使う
+const PRIORITY_RANK = { '高':3, 'S':3, '中':2, 'A':2, '低':1, 'B':1 };
+const priorityRank = v => PRIORITY_RANK[String(v||'').trim()] || 0;
+const priorityCls  = v => { const r=priorityRank(v); return r===3?'pri-high':r===2?'pri-mid':r===1?'pri-low':''; };
 const kindList  = ()=> (MA()? MA().ACTIVITY_KINDS : KIND_FALLBACK);
 
 async function openActivityTab(){
@@ -1002,7 +1043,7 @@ function fillCardFacilitySelect(){
   toggleNewFacilityForm();
 }
 
-['#facQ','#facArea','#facType','#facStage'].forEach(s=>{
+['#facQ','#facArea','#facType','#facStage','#facSort'].forEach(s=>{
   const el=$(s); if(el) el.addEventListener('input',renderFacilities);
 });
 
@@ -1015,6 +1056,7 @@ function renderFacilities(){
   }
   const q=$('#facQ').value.trim().toLowerCase();
   const fa=$('#facArea').value, ft=$('#facType').value, fs=$('#facStage').value;
+  const sortMode=$('#facSort')?.value||'priority';
   const hit=facilities.filter(f=>{
     if(q && ![f.name,f.tel].some(v=>(v||'').toLowerCase().includes(q))) return false;
     if(fa && (f.area||'')!==fa) return false;
@@ -1022,6 +1064,11 @@ function renderFacilities(){
     if(fs && facStageLabel(f.stage)!==fs) return false;
     return true;
   });
+  if(sortMode==='priority'){
+    hit.sort((a,b)=> priorityRank(b.priority)-priorityRank(a.priority) || String(a.name||'').localeCompare(String(b.name||''),'ja'));
+  }else{
+    hit.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ja'));
+  }
   $('#facCount').textContent=`全 ${facilities.length} 施設`+((q||fa||ft||fs)?`（${hit.length} 件ヒット）`:'');
   if(!hit.length){ area.innerHTML='<div class="muted" style="padding:24px;text-align:center">該当する施設がありません</div>'; return; }
   area.innerHTML=hit.map(f=>`
@@ -1031,6 +1078,7 @@ function renderFacilities(){
         <div class="sub">${esc(f.area||'')}${f.type?' / '+esc(f.type):''}${f.tel?' / '+esc(f.tel):''}</div>
       </div>
       <div class="sp" style="flex:1"></div>
+      ${f.priority?`<span class="pill ${priorityCls(f.priority)}">${esc(f.priority)}</span>`:''}
       <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span>
     </div>`).join('');
 }
@@ -1046,6 +1094,7 @@ window.openFacility=async function(docId){
   const m=document.createElement('div'); m.className='overlay'; m.onclick=e=>{if(e.target===m)m.remove();};
   m.innerHTML=`<div class="modal pad">
     <div class="row" style="align-items:center"><h2 style="margin:0;flex:1;font-size:18px">${esc(f.name||'')}</h2>
+      ${f.priority?`<span class="pill ${priorityCls(f.priority)}">${esc(f.priority)}</span>`:''}
       <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span></div>
     <p class="muted" style="margin:4px 0 12px">${esc(f.area||'')}${f.type?' / '+esc(f.type):''}${f.owner?' / 担当 '+esc(f.owner):''}</p>
     ${f.tel?`<div class="kv"><div class="k">電話</div><div class="v"><a href="tel:${esc(f.tel)}">${esc(f.tel)}</a></div></div>`:''}
