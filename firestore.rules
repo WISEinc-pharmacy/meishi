@@ -62,6 +62,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 名刺アプリからの施設追加申請。施設台帳への反映は連のAdmin SDKだけが行う。
+    match /facility_requests/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.createdBy == request.auth.token.email;
+      allow update: if isSignedIn() && resource.data.createdBy == request.auth.token.email
+                    && request.resource.data.status == resource.data.status;
+      allow delete: if isAdmin();
+    }
+
     // 営業活動記録。サインインしていれば誰でも1件書ける（名刺の編集権 canEdit() とは独立）。
     // ・create: 同期状態は必ず pending で作り、作成者は自分のメールに限定する
     // ・update: 作成者本人のみ。syncState（連が書き戻す同期状態）は本人も変更できない

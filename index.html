@@ -216,7 +216,17 @@
              値は facilities のドキュメントID＝施設名を正規化したもの（facilityKey）。
              施設IDは一意でない（同一電話の別棟で衝突・未取得9件は空）ため紐付けキーに使わない（追補2） -->
         <div class="fg"><label class="f">施設（任意・選ぶと活動記録と紐づきます）</label>
-          <select name="facilityKey" id="cardFacility"><option value="">（未設定）</option></select></div>
+          <select name="facilityKey" id="cardFacility"><option value="">（未設定）</option><option value="__new__">＋ 新規施設として登録</option></select></div>
+        <div id="newFacilityFields" class="hidden">
+          <div id="facilityDupWarn" class="dupbox hidden"></div>
+          <div class="grid2">
+            <div class="fg"><label class="f">新規施設名 *</label><input name="newFacilityName" required></div>
+            <div class="fg"><label class="f">電話番号 *</label><input name="newFacilityPhone" required inputmode="tel"></div>
+            <div class="fg"><label class="f">エリア *</label>
+              <select name="newFacilityArea" required><option value="">選択してください</option><option>東葛</option><option>城北</option><option>西東京</option><option>外来</option></select></div>
+            <div class="fg"><label class="f">区分 *</label><input name="newFacilityKubun" list="facilityKubunOptions" required><datalist id="facilityKubunOptions"></datalist></div>
+          </div>
+        </div>
         <div class="grid2">
           <!-- ステータス＝ステージ7値（2026-10-19 語彙統一）。
                旧値→新値の対応表は activity_payload.js の LEGACY_STATUS_MAP が正本：
@@ -286,18 +296,12 @@
   window.dispatchEvent(new Event('meishi-activity-ready'));
 </script>
 
+<script src="firebase_config.js"></script>
 <script>
 // ===== Firebase 設定（wise-meishi 専用プロジェクト）=====
-// ↓ プロジェクト作成後に値を差し替える。未設定なら画面にセットアップ案内を表示。
-const firebaseConfig = {
-  apiKey: "AIzaSyAUqa6aUV2gqdNxAdmCWVxmbisaVb_tP18",
-  authDomain: "wise-meishi.firebaseapp.com",
-  projectId: "wise-meishi",
-  storageBucket: "wise-meishi.firebasestorage.app",
-  messagingSenderId: "306031554184",
-  appId: "1:306031554184:web:05fb61369bf71255f9393d"
-};
-const CONFIGURED = !firebaseConfig.apiKey.startsWith("__");
+// 実値は firebase_config.js（同ディレクトリ・このファイルの直前に読込）に分離してある。
+const firebaseConfig = window.__MEISHI_FIREBASE_CONFIG__ || { apiKey: "NONE" };
+const CONFIGURED = firebaseConfig.apiKey !== "NONE";
 
 const GEMINI_MODEL = "gemini-2.5-flash"; // Vision対応・低コスト
 
@@ -677,9 +681,19 @@ function openForm(data,imgUrl,id,backUrl){
   f.department.value=data.department||''; f.title.value=data.title||''; f.email.value=data.email||'';
   f.phone.value=data.phone||''; f.mobile.value=data.mobile||''; f.address.value=data.address||'';
   f.url.value=data.url||'';
+  f.newFacilityName.value=''; f.newFacilityPhone.value=''; f.newFacilityArea.value=''; f.newFacilityKubun.value='';
   // 旧ステータス（初回接触等）のカードはステージ7値へ読み替えてから選択状態にする
   f.status.value=stageLabel(data.status||'');
-  if(f.facilityKey){ fillCardFacilitySelect(); f.facilityKey.value=data.facilityKey||''; }
+  if(f.facilityKey){
+    fillCardFacilitySelect();
+    const savedKey=data.facilityKey||'';
+    if(savedKey && ![...f.facilityKey.options].some(o=>o.value===savedKey)){
+      const opt=document.createElement('option'); opt.value=savedKey; opt.textContent=(data.facilityName||savedKey)+'（申請中）';
+      f.facilityKey.insertBefore(opt,f.facilityKey.querySelector('option[value="__new__"]'));
+    }
+    f.facilityKey.value=savedKey;
+    toggleNewFacilityForm();
+  }
   f.nextActionDate.value=data.nextActionDate||''; f.memo.value=data.memo||'';
   $('#formPreview').src=imgUrl||data.thumb||'';
   $('#formPreview').style.display=(imgUrl||data.thumb)?'block':'none';
@@ -718,6 +732,48 @@ function checkDup(name,company,email){
   }else w.classList.add('hidden');
 }
 
+function facilityDuplicateResult(name,phone){
+  const m=MA();
+  if(m?.findFacilityDuplicates) return m.findFacilityDuplicates(name,phone,facilities);
+  const phoneKey=String(phone||'').normalize('NFKC').replace(/\D/g,'');
+  const norm=v=>String(v||'').normalize('NFKC').replace(/\s+/gu,'').toLowerCase();
+  const nameKey=norm(name);
+  return {
+    phoneMatches:phoneKey?facilities.filter(x=>String(x.tel||x.phone||'').normalize('NFKC').replace(/\D/g,'')===phoneKey):[],
+    nameMatches:nameKey?facilities.filter(x=>{const n=norm(x.name);return n&&(n.includes(nameKey)||nameKey.includes(n));}):[]
+  };
+}
+
+function renderNewFacilityDuplicates(){
+  const f=$('#cardForm'), w=$('#facilityDupWarn');
+  if(!f || f.facilityKey.value!=='__new__'){ if(w) w.classList.add('hidden'); return {phoneMatches:[],nameMatches:[]}; }
+  const hits=facilityDuplicateResult(f.newFacilityName.value,f.newFacilityPhone.value);
+  const lines=[];
+  if(hits.phoneMatches.length){
+    lines.push('⚠️ 既に登録されている可能性がある施設があります：<br>'+hits.phoneMatches.slice(0,5).map(x=>'・'+esc(x.name||x.id)+'（'+esc(x.tel||x.phone||'')+'）').join('<br>'));
+  }
+  const phoneSet=new Set(hits.phoneMatches);
+  const similar=hits.nameMatches.filter(x=>!phoneSet.has(x));
+  if(similar.length) lines.push('似ている施設があります：<br>'+similar.slice(0,5).map(x=>'・'+esc(x.name||x.id)).join('<br>'));
+  if(lines.length){
+    w.innerHTML=lines.join('<br><br>')+'<br><small>確認のうえ、このまま新規施設として登録する場合も保存できます。</small>';
+    w.classList.remove('hidden');
+  }else w.classList.add('hidden');
+  return hits;
+}
+
+function toggleNewFacilityForm(){
+  const f=$('#cardForm'), box=$('#newFacilityFields'); if(!f||!box) return;
+  const active=f.facilityKey.value==='__new__';
+  box.classList.toggle('hidden',!active);
+  ['newFacilityName','newFacilityPhone','newFacilityArea','newFacilityKubun'].forEach(n=>{ f[n].required=active; });
+  if(active) renderNewFacilityDuplicates(); else $('#facilityDupWarn').classList.add('hidden');
+}
+
+$('#cardFacility').addEventListener('change',toggleNewFacilityForm);
+['newFacilityName','newFacilityPhone'].forEach(n=>$('#cardForm')[n].addEventListener('input',renderNewFacilityDuplicates));
+toggleNewFacilityForm();
+
 $('#cancelForm').onclick=()=>{ editingId=null; resetStart(); show('start'); };
 
 $('#cardForm').onsubmit=async e=>{
@@ -726,6 +782,16 @@ $('#cardForm').onsubmit=async e=>{
   const f=e.target, btn=$('#saveBtn');
   btn.disabled=true; btn.textContent='保存中…';
   try{
+    const isNewFacility=f.facilityKey && f.facilityKey.value==='__new__';
+    let newFacility=null;
+    if(isNewFacility){
+      newFacility={
+        name:f.newFacilityName.value.trim(), phone:f.newFacilityPhone.value.trim(),
+        area:f.newFacilityArea.value, kubun:f.newFacilityKubun.value.trim()
+      };
+      if(!newFacility.name||!newFacility.phone||!newFacility.area||!newFacility.kubun) throw new Error('新規施設の4項目をすべて入力してください');
+      renderNewFacilityDuplicates();
+    }
     const rec={
       name:f.name.value.trim(), kana:f.kana.value.trim(), company:f.company.value.trim(),
       department:f.department.value.trim(), title:f.title.value.trim(), email:f.email.value.trim(),
@@ -734,11 +800,11 @@ $('#cardForm').onsubmit=async e=>{
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
     // 施設の紐付け（任意）。未選択なら空文字で保存＝必須項目は増やさない
-    const fkey=f.facilityKey? f.facilityKey.value : '';
+    const fkey=isNewFacility?facKey({name:newFacility.name}):(f.facilityKey?f.facilityKey.value:'');
     const fac=fkey? (facilities.find(x=>facKey(x)===fkey)||{}) : {};
     rec.facilityKey=fkey;
-    rec.facilityName=fkey? (fac.name||fkey) : '';
-    rec.facilityId=fkey? (fac.facilityId||'') : '';   // 表示用の属性（一意ではない）
+    rec.facilityName=isNewFacility?newFacility.name:(fkey?(fac.name||fkey):'');
+    rec.facilityId=isNewFacility?'':(fkey?(fac.facilityId||''):'');   // 表示用の属性（一意ではない）
     // 表面：新規撮影時のみサムネ・原本を作る（編集で撮り直さなければ既存を保持）
     let frontFull=null, backFull=null;
     if(pendingFront){
@@ -747,6 +813,12 @@ $('#cardForm').onsubmit=async e=>{
       rec.hasImage=true;
     }
     if(pendingBack){ backFull=await blobToResizedDataUrl(pendingBack,1024,0.78); rec.hasBack=true; }
+    if(isNewFacility){
+      await db.collection('facility_requests').add({
+        ...newFacility, status:'pending', createdBy:currentUser.email,
+        createdAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
     let id=editingId;
     if(id){ await db.collection('cards').doc(id).update(rec); }
     else{
@@ -811,7 +883,7 @@ window.openDetail=function(id){
     <p class="muted" style="margin:4px 0 12px">${esc(c.company||'')}${c.title?' / '+esc(c.title):''}</p>
     ${(c.thumb||c.hasImage)?`<img class="detail-img" id="detailImg" src="${esc(c.thumb||'')}" alt="表面">`:''}
     ${c.hasBack?`<img class="detail-img" id="detailImgBack" src="" alt="裏面">`:''}
-    ${kv('部署',c.department)}${kv('役職',c.title)}
+    ${kv('部署',c.department)}${kv('役職',c.title)}${kv('施設',c.facilityName)}
     ${kv('メール',c.email,c.email?'mailto:'+c.email:'')}
     ${kv('電話',c.phone,c.phone?'tel:'+c.phone:'')}
     ${kv('携帯',c.mobile,c.mobile?'tel:'+c.mobile:'')}
@@ -913,10 +985,21 @@ function fillFacilityFilters(){
 
 function fillCardFacilitySelect(){
   const el=$('#cardFacility'); if(!el) return;
-  const cur=el.value;
+  const cur=el.value, curText=el.selectedOptions[0]?.textContent||cur;
   el.innerHTML='<option value="">（未設定）</option>'+
-    facilities.map(f=>`<option value="${esc(facKey(f))}">${esc(f.name||f.id)}</option>`).join('');
+    facilities.map(f=>`<option value="${esc(facKey(f))}">${esc(f.name||f.id)}</option>`).join('')+
+    '<option value="__new__">＋ 新規施設として登録</option>';
+  if(cur && cur!=='__new__' && ![...el.options].some(o=>o.value===cur)){
+    const opt=document.createElement('option'); opt.value=cur; opt.textContent=curText;
+    el.insertBefore(opt,el.querySelector('option[value="__new__"]'));
+  }
   el.value=cur;
+  const kubun=$('#facilityKubunOptions');
+  if(kubun){
+    const vals=[...new Set(facilities.map(f=>String(f.type||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+    kubun.innerHTML=vals.map(v=>`<option value="${esc(v)}"></option>`).join('');
+  }
+  toggleNewFacilityForm();
 }
 
 ['#facQ','#facArea','#facType','#facStage'].forEach(s=>{

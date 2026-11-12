@@ -61,3 +61,4 @@ https://wiseinc-pharmacy.github.io/meishi/
 ## 更新履歴
 - 2026-06-18 初版作成。画像はFirestore直接保存方式（Storage不使用）に決定
 - 2026-07-02 権限を3種化（admin / **editor** / viewer）。editor=登録・編集・削除まで可／権限管理・AIキー登録は admin のみ。使い方モーダルに権限表を追加。`firestore.rules` に `canEdit()`（admin/editor）を追加 → **コンソールのRulesタブに貼り付けて公開が必要**
+- 2026-11-06 メール2欄と名刺取得日を追加（要望c8jyenQkJxkSw1V4JtXE・HC-20261008-001）。email=会社用（従来のまま）／emailPersonal=個人用／receivedDate=名刺取得日(YYYY-MM-DD)。既存カードは新フィールドが無くても表示・保存可。純関数は card_fields.js、テストは node test_card_fields.mjs（反映待ち・Codex review_id codex-implement-20261106-163026-370-5fb）

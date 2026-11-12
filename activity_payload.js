@@ -46,6 +46,32 @@ export function facilityKeyOf(name) {
   return s;
 }
 
+/** 電話番号の同一性判定用。全角数字を半角化したうえで数字だけを残す。 */
+export function normalizePhone(value) {
+  return String(value == null ? '' : value).normalize('NFKC').replace(/\D/g, '');
+}
+
+/** 施設名の類似判定用。全角半角を寄せ、空白を除去し、大文字小文字を無視する。 */
+export function normalizeFacilityNameForMatch(value) {
+  return String(value == null ? '' : value).normalize('NFKC').replace(/\s+/gu, '').toLowerCase();
+}
+
+/**
+ * 新規施設候補と既存 facilities の重複候補を返す純粋関数。
+ * 電話は全体一致のみ、施設名は正規化後の相互部分一致で判定する。
+ */
+export function findFacilityDuplicates(name, phone, facilities) {
+  const phoneKey = normalizePhone(phone);
+  const nameKey = normalizeFacilityNameForMatch(name);
+  const rows = Array.isArray(facilities) ? facilities : [];
+  const phoneMatches = phoneKey ? rows.filter((f) => normalizePhone(f?.tel ?? f?.phone) === phoneKey) : [];
+  const nameMatches = nameKey ? rows.filter((f) => {
+    const existing = normalizeFacilityNameForMatch(f?.name);
+    return existing && (existing.includes(nameKey) || nameKey.includes(existing));
+  }) : [];
+  return { phoneMatches, nameMatches };
+}
+
 /** ステージ表示用のCSSクラス（①等の記号をクラス名に出さないASCIIスラッグ） */
 const STAGE_SLUG = {
   '①あいさつ': 'st-s1',
