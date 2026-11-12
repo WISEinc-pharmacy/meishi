@@ -1079,6 +1079,7 @@ function renderFacilities(){
       </div>
       <div class="sp" style="flex:1"></div>
       ${f.priority?`<span class="pill ${priorityCls(f.priority)}">${esc(f.priority)}</span>`:''}
+      ${f.nextVisitDate?`<span class="pill" style="background:#e9f6ff;color:#1f7fa6">次回訪問 ${esc(f.nextVisitDate)}</span>`:''}
       <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span>
     </div>`).join('');
 }
@@ -1098,6 +1099,11 @@ window.openFacility=async function(docId){
       <span class="pill ${facStageCls(f.stage)}">${esc(facStageLabel(f.stage))}</span></div>
     <p class="muted" style="margin:4px 0 12px">${esc(f.area||'')}${f.type?' / '+esc(f.type):''}${f.owner?' / 担当 '+esc(f.owner):''}</p>
     ${f.tel?`<div class="kv"><div class="k">電話</div><div class="v"><a href="tel:${esc(f.tel)}">${esc(f.tel)}</a></div></div>`:''}
+    <div class="kv"><div class="k">次回訪問日</div><div class="v">
+      <input type="date" id="nextVisitInput" value="${esc(f.nextVisitDate||'')}" style="padding:7px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+      <button type="button" class="btn sec sm" id="nextVisitSaveBtn" style="margin-left:6px">保存</button>
+    </div></div>
+    <p class="muted" style="margin:2px 0 0">活動記録（下の「活動を記録」）とは別に、ここで直接セットできます。保存後、台帳への反映まで少し時間がかかります。</p>
     <button class="btn" style="width:100%;margin:14px 0" onclick="openActivityForm('${esc(docId)}')">活動を記録</button>
     <h3 style="font-size:14px;margin:14px 0 6px">この施設の名刺（${mine.length}）</h3>
     ${mine.length? mine.map(c=>`<div class="kv"><div class="k">${esc(c.title||'—')}</div><div class="v">${esc(c.name||'')}</div></div>`).join('')
@@ -1108,8 +1114,24 @@ window.openFacility=async function(docId){
       <button class="btn sec" onclick="this.closest('.overlay').remove()">閉じる</button>
     </div></div>`;
   $('#detailMount').appendChild(m);
+  m.querySelector('#nextVisitSaveBtn').onclick=()=>saveNextVisitDate(docId,fkey,m.querySelector('#nextVisitInput').value);
   renderActivityHistory(fkey, m.querySelector('#actHist'));
 };
+
+// 施設詳細から直接セットする項目（活動記録とは別）。連〈れん〉が次回巡回で施設台帳AB列へ反映する
+async function saveNextVisitDate(docId,fkey,value){
+  if(!currentUser){ toast('ログインしてください'); return; }
+  const v=String(value||'').trim();
+  try{
+    await db.collection('facility_field_updates').add({
+      facilityKey:fkey, field:'nextVisitDate', value:v, status:'pending',
+      createdBy:currentUser.email, createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    const f=facilities.find(x=>x.id===docId); if(f) f.nextVisitDate=v;
+    toast('次回訪問日を保存しました（まもなく施設台帳へ反映されます）');
+    renderFacilities();
+  }catch(e){ toast('保存失敗: '+(e.code||e.message)); }
+}
 
 async function fetchActivities(fkey){
   // 複合インデックス(facilityKey,date desc)が未作成でも動くように、失敗したら手元で並べ替える

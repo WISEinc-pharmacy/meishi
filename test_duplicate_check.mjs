@@ -45,6 +45,11 @@ check('facility_requests の create/update 状態ガードがある',
   /match \/facility_requests\/\{id\}/.test(rules)
   && /request\.resource\.data\.status == 'pending'/.test(rules)
   && /request\.resource\.data\.status == resource\.data\.status/.test(rules));
+check('facility_field_updates（次回訪問日など）の create/update 状態ガードがある',
+  /match \/facility_field_updates\/\{id\}/.test(rules));
+check('施設詳細の次回訪問日UIがある',
+  /id="nextVisitInput"/.test(html) && /id="nextVisitSaveBtn"/.test(html)
+  && /facility_field_updates/.test(html));
 
 if (failed) process.exitCode = 1;
 else console.log('全検証PASS');
