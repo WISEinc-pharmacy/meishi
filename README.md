@@ -25,6 +25,8 @@ https://wiseinc-pharmacy.github.io/meishi/
 - 営業フォロー管理（ステータス／次アクション日／メモ）
 - 重複チェック（氏名＋会社 または メール）
 - CSV出力
+- **新規施設として登録**（名刺の「施設」プルダウンから。電話番号一致・名称類似の重複警告つき。保存すると営業管理スプレッドシートの施設台帳へ連Botが自動反映。2026-11-12追加）
+- **営業活動タブ**（旧「活動」タブ）：施設台帳の優先度（高/中/低等）をそのまま一覧表示・並び替え可能。施設詳細で**次回訪問日**を活動記録と別に直接セット可能（2026-11-12追加）
 
 ## 権限（budget-tool準拠・メールキー方式）
 - 全営業で共有（Firebase Authログイン必須）。権限は **admin / editor / viewer** の3種類。
@@ -59,6 +61,7 @@ https://wiseinc-pharmacy.github.io/meishi/
 5. 初回ログイン後、`users/{uid}` の `role` を `admin` に変更（最初の管理者）
 
 ## 更新履歴
+- 2026-11-12 ①新規施設として登録（重複警告つき・facility_requests経由で連Botが施設台帳へ反映）②施設台帳E列「優先度」を施設一覧に反映・並び替え可能化③タブ名「活動」→「営業活動」に変更④次回訪問日（facility_field_updates経由。⚠保存用Firestoreルールの本番デプロイ未確認）。使い方モーダル・スプシ「使い方（はじめに）」タブも同時更新
 - 2026-06-18 初版作成。画像はFirestore直接保存方式（Storage不使用）に決定
 - 2026-07-02 権限を3種化（admin / **editor** / viewer）。editor=登録・編集・削除まで可／権限管理・AIキー登録は admin のみ。使い方モーダルに権限表を追加。`firestore.rules` に `canEdit()`（admin/editor）を追加 → **コンソールのRulesタブに貼り付けて公開が必要**
 - 2026-11-06 メール2欄と名刺取得日を追加（要望c8jyenQkJxkSw1V4JtXE・HC-20261008-001）。email=会社用（従来のまま）／emailPersonal=個人用／receivedDate=名刺取得日(YYYY-MM-DD)。既存カードは新フィールドが無くても表示・保存可。純関数は card_fields.js、テストは node test_card_fields.mjs（反映待ち・Codex review_id codex-implement-20261106-163026-370-5fb）

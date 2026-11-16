@@ -407,6 +407,14 @@ function openHelp(){
       <li>「<b>保存する</b>」を押す（同じ名刺が既にあると警告が出ます）</li>
     </ol>
 
+    <h3 style="margin:16px 0 6px;font-size:15px">🏢 新しい施設を登録する<span class="muted" style="font-weight:400;font-size:12px">（admin・editor・2026-11-12追加）</span></h3>
+    <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
+      <li>名刺の登録・編集画面で「<b>施設</b>」のプルダウンから「<b>＋ 新規施設として登録</b>」を選ぶ</li>
+      <li>施設名・電話番号・エリア・種別の<b>4項目</b>を入力する（すべて必須）</li>
+      <li>同じ電話番号・似た名前の施設が既にあると<b>⚠️警告</b>が出る。「<b>別の事業者として登録</b>」（本当に別なら）または「<b>キャンセル</b>」を選ぶ</li>
+      <li>「保存する」を押すと、営業管理スプレッドシートの施設台帳へ<b>自動で反映</b>される（スプレッドシートを開く必要はない）</li>
+    </ol>
+
     <h3 style="margin:16px 0 6px;font-size:15px">🔍 名刺を見る・探す<span class="muted" style="font-weight:400;font-size:12px">（全員）</span></h3>
     <ol style="margin:0 0 4px 18px;padding:0;line-height:1.9">
       <li>「<b>一覧・検索</b>」タブを開く</li>
@@ -424,6 +432,7 @@ function openHelp(){
       <li>ステージ・次アクション・メモを入れて「<b>保存する</b>」　← 営業管理スプレッドシートへは自動で反映されます</li>
     </ol>
     <p class="muted" style="margin:0 0 4px">※ 入力する人はスプレッドシートを開く必要はありません。施設の一覧が空のときは、施設台帳からの同期がまだ済んでいません。</p>
+    <p class="muted" style="margin:6px 0 4px"><b>次回訪問日</b>：施設詳細を開くと、電話番号の下に「次回訪問日」の入力欄があります。活動記録とは別に、ここで直接セットできます（保存後、台帳への反映まで少し時間がかかります）。</p>
 
     <h3 style="margin:16px 0 6px;font-size:15px">💡 ヒント</h3>
     <ul style="margin:0 0 4px 18px;padding:0;line-height:1.9">
@@ -607,6 +616,10 @@ $('#readBtn').onclick=async ()=>{
   if(!pendingFront){ toast('表面を撮影してください'); return; }
   const frontUrl=URL.createObjectURL(pendingFront);
   const backUrl=pendingBack?URL.createObjectURL(pendingBack):'';
+  // ログイン時の1回読みが失敗しているとgeminiKeyがnullのまま固定されるため、押下時にも再取得を試みる（INC: mweg4kxha5k）
+  if(!geminiKey){
+    try{ const g=await db.collection('config').doc('gemini').get(); geminiKey=g.exists?g.data().apiKey:null; }catch(e){ geminiKey=null; }
+  }
   if(geminiKey){
     show('busy'); $('#busyMsg').textContent='AIが名刺を読み取っています…';
     try{
@@ -626,6 +639,8 @@ $('#readBtn').onclick=async ()=>{
       openForm({},frontUrl,null,backUrl);
     }
   }else{
+    // 再取得後もキーが無い場合は、admin以外にも理由を知らせてから手入力へ落とす（従来は無言フォールバックだった）
+    toast('AI読み取りキーが設定されていません。手入力してください'+(userRole==='admin'?'（右上「AI読み取りキー」から登録できます）':''));
     openForm({},frontUrl,null,backUrl);
   }
 };
